@@ -49,7 +49,6 @@ class Bot:
         self.u = 0 # initialise to 0
         self.v = 0 # initialise to 0    
 
-
 ##################################################################################
 # 2. Define the destination point
 ##################################################################################
@@ -58,9 +57,14 @@ class Destination:
         self.x = x
         self.y = y
 
+def dist_f_error(Bot, Destination):
+    """
+    Calculate the distance from the bot to the destination.
+    """
+    return math.sqrt((Bot.x - Destination.x)**2 + (Bot.y - Destination.y)**2)
 
 ##################################################################################
-# 3. MPC Constraints?
+# 3. Open loop Code
 ##################################################################################
 
 
