@@ -2,6 +2,8 @@ import math
 import matplotlib.pyplot as plt
 # import matplotlib
 import numpy as np
+from DrawShapes import sketch
+
 
 ##################################################################################
 # 1. Define the box as well as robots as classes 
@@ -54,7 +56,9 @@ class Bot:
         self.max_speed = max_speed
         self.heading_angle = 0
         self.u = 0 # initialise to 0
-        self.v = 0 # initialise to 0    
+        self.v = 0 # initialise to 0   
+        self.path_x = []
+        self.path_y = [] 
 
 ##################################################################################
 # 2. Define the destination point
@@ -82,32 +86,32 @@ def path_add(Box, Destination, Bot1, Bot2, dt):
     It updates the position of the box and the bots based on their velocities.
     """
     Box.update_state(dt, Bot1, Bot2)
-    
-    # Update bot positions
-    Bot1.x += Bot1.u * dt
-    Bot1.y += Bot1.v * dt
-    
-    Bot2.x += Bot2.u * dt
-    Bot2.y += Bot2.v * dt
-    
+
     # Store the path for plotting
     path_x.append(Box.x)
     path_y.append(Box.y)
+    Bot1.path_x.append(Bot1.x)
+    Bot1.path_y.append(Bot1.y)
+    Bot2.path_x.append(Bot2.x)
+    Bot2.path_y.append(Bot2.y)
 
 ##################################################################################
 # 4. Open loop Code
 ##################################################################################
 
 ### Declaring the box and the bots
-box1 = box(6, 110, 0)
+box1 = box(0, 0, 0)
 Bot1 = Bot(2, -2, 0.5)
 Bot2 = Bot(-2, 2, 0.5)
 
-Dest= Destination(-10, 10)
+Dest= Destination(10, 10)
 # Time step for simulation
 dt = 0.1
 
-while dist_f_error(box1, Dest)>0.1:
+plt.ion()  # Turn on interactive mode
+fig, ax = plt.subplots()
+
+while dist_f_error(box1, Dest) > 0.1:
     heading_angle = math.atan2(Dest.y - box1.y, Dest.x - box1.x)
     Bot1.u = Bot1.max_speed * math.cos(heading_angle)
     Bot1.v = Bot1.max_speed * math.sin(heading_angle)
@@ -116,43 +120,37 @@ while dist_f_error(box1, Dest)>0.1:
 
     path_add(box1, Dest, Bot1, Bot2, dt)
 
-    # plt.figure()
-    # plt.plot(box1.x, box1.y, 'ro', label='Box')
-    # plt.plot(Bot1.x, Bot1.y, 'bo', label='Bot 1')
-    # plt.plot(Bot2.x, Bot2.y, 'go', label='Bot 2')
-    # plt.plot(Dest.x, Dest.y, 'yo', label='Destination')
-    # plt.xlim(-5, 15)
-    # plt.ylim(-5, 15)
-    # plt.xlabel('X Position')
-    # plt.ylabel('Y Position')
-    # plt.title('Initial Positions')
-    # plt.legend()
-    # plt.grid()
-    # plt.show()
+    ax.clear()  # Clear previous frame
+    ax.plot(box1.x, box1.y, 'ro', label='Box')
+    ax.plot(Bot1.x, Bot1.y, 'bo', label='Bot 1')
+    ax.plot(Bot2.x, Bot2.y, 'go', label='Bot 2')
+    ax.plot(Dest.x, Dest.y, 'yo', label='Destination')
+    ax.set_xlim(-5, 15)
+    ax.set_ylim(-5, 15)
+    ax.set_xlabel('X Position')
+    ax.set_ylabel('Y Position')
+    ax.set_title('Dynamic Positioning')
+    ax.legend()
+    ax.grid(True)
+    plt.pause(0.05)  # Pause to update the figure
 
+plt.ioff()  # Turn off interactive mode
+plt.show()  # Show final frame
 
-# Plotting the initial positions
-# plt.figure()
-# plt.plot(box1.x, box1.y, 'ro', label='Box')
-# plt.plot(Bot1.x, Bot1.y, 'bo', label='Bot 1')
-# plt.plot(Bot2.x, Bot2.y, 'go', label='Bot 2')
-# plt.plot(Dest.x, Dest.y, 'yo', label='Destination')
-# plt.xlim(-5, 15)
-# plt.ylim(-5, 15)
-# plt.xlabel('X Position')
-# plt.ylabel('Y Position')
-# plt.title('Initial Positions')
-# plt.legend()
-# plt.grid()
-# plt.show()
 
 # plot path_x and path_y
 plt.figure()
 plt.plot(path_x, path_y, 'r-', label='Path of the Box')
 plt.plot(Dest.x, Dest.y, 'yo', label='Destination')
+plt.plot(Bot1.path_x, Bot1.path_y, 'b--', label='Path of Bot 1')
+plt.plot(Bot2.path_x, Bot2.path_y, 'g--', label='Path of Bot 2')
+plt.xlim(-20, 20)
+plt.ylim(-20, 20)
 plt.xlabel('X Position')
 plt.ylabel('Y Position')
 plt.title('Initial Positions')
 plt.legend()
 plt.grid()
 plt.show()
+
+sketch.print_shape()  # Call the function to print the shape description
