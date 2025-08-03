@@ -48,6 +48,15 @@ class box:
         Bot2.y += self.v *dt
         self.theta += omega *dt
         print(f"Box Position: ({self.x}, {self.y})")
+
+    def rotate(self, angle):
+        pass
+
+    def translate(self):
+        pass
+
+    def combined_rotate_translate(self):
+        pass
         
 class Bot:
     def __init__(self,x,y, max_speed):
@@ -59,6 +68,9 @@ class Bot:
         self.v = 0 # initialise to 0   
         self.path_x = []
         self.path_y = [] 
+
+        self.bot_x = 0
+        self.bot_y = 0
 
 ##################################################################################
 # 2. Define the destination point
@@ -153,4 +165,4 @@ plt.legend()
 plt.grid()
 plt.show()
 
-sketch.print_shape()  # Call the function to print the shape description
+# sketch.print_shape()  # Call the function to print the shape description
