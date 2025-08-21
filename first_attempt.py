@@ -1,6 +1,7 @@
 import math
 import matplotlib.pyplot as plt
 # import matplotlib
+import matplotlib.patches as patches
 import numpy as np
 from DrawShapes import sketch
 
@@ -59,9 +60,13 @@ class box:
         pass
         
 class Bot:
-    def __init__(self,x,y, max_speed):
+    def __init__(self,x,y, length, width,max_speed):
         self.x = x
         self.y = y
+
+        self.length=length
+        self.width=width
+
         self.max_speed = max_speed
         self.heading_angle = 0
         self.u = 0 # initialise to 0
@@ -79,6 +84,15 @@ class Destination:
     def __init__(self, x, y):
         self.x = x
         self.y = y
+
+class Trajectory:
+    def __init__(self, Destination):
+        self.path_x = np.array([])
+        self.path_y = np.array([])
+        self.speed_x = np.array([])
+        self.speed_y = np.array([])
+        self.final_x = Destination.x
+        self.final_y = Destination.y
 
 def dist_f_error(Bot, Destination):
     """
@@ -113,8 +127,8 @@ def path_add(Box, Destination, Bot1, Bot2, dt):
 
 ### Declaring the box and the bots
 box1 = box(0, 0, 0)
-Bot1 = Bot(2, -2, 0.5)
-Bot2 = Bot(-2, 2, 0.5)
+Bot1 = Bot(2, -2, 3,1, 0.5)
+Bot2 = Bot(-2, 2,3,1, 0.5)
 
 Dest= Destination(10, 10)
 # Time step for simulation
@@ -124,26 +138,20 @@ plt.ion()  # Turn on interactive mode
 fig, ax = plt.subplots()
 
 while dist_f_error(box1, Dest) > 0.1:
+    
+    sketch.print_plot(ax, box1, Bot1, Bot2, Dest)
+    
     heading_angle = math.atan2(Dest.y - box1.y, Dest.x - box1.x)
     Bot1.u = Bot1.max_speed * math.cos(heading_angle)
     Bot1.v = Bot1.max_speed * math.sin(heading_angle)
+    Bot1.heading_angle = math.degrees(heading_angle)
+    Bot2.heading_angle = math.degrees(heading_angle)  
     Bot2.u = Bot1.u
     Bot2.v = Bot1.v
 
     path_add(box1, Dest, Bot1, Bot2, dt)
 
-    ax.clear()  # Clear previous frame
-    ax.plot(box1.x, box1.y, 'ro', label='Box')
-    ax.plot(Bot1.x, Bot1.y, 'bo', label='Bot 1')
-    ax.plot(Bot2.x, Bot2.y, 'go', label='Bot 2')
-    ax.plot(Dest.x, Dest.y, 'yo', label='Destination')
-    ax.set_xlim(-5, 15)
-    ax.set_ylim(-5, 15)
-    ax.set_xlabel('X Position')
-    ax.set_ylabel('Y Position')
-    ax.set_title('Dynamic Positioning')
-    ax.legend()
-    ax.grid(True)
+    
     plt.pause(0.05)  # Pause to update the figure
 
 plt.ioff()  # Turn off interactive mode

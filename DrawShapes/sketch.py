@@ -1,8 +1,35 @@
+import matplotlib.patches as patches
+import matplotlib.pyplot as plt
+import math
+
 def print_shape():
     print("This is a box shape.")
 
-def print_box():
-    pass
+def print_box(x,y,length, width, theta, ax):
+    # print(f"Box Length: {length}, Width: {width}, Heading Angle: {theta}")
+    diag = math.sqrt(length**2 + width**2)
+    rect = patches.Rectangle((x-(diag*math.cos(theta)/2), y-(diag*math.sin(theta)/2)), length, width, angle=theta,
+                            linewidth=2, edgecolor='blue', facecolor='lightgray')
+
+    ax.add_patch(rect)
 
 def print_bot():
     pass
+
+
+def print_plot(ax, box1, Bot1, Bot2, Dest):
+    ax.clear()  # Clear previous frame
+    ax.plot(box1.x, box1.y, 'ro', label='Box')
+    ax.plot(Bot1.x, Bot1.y, 'bo', label='Bot 1')
+    ax.plot(Bot2.x, Bot2.y, 'go', label='Bot 2')
+    ax.plot(Dest.x, Dest.y, 'yo', label='Destination')
+    print_box(Bot1.x,Bot1.y,Bot1.length,Bot1.width, Bot1.heading_angle, ax)
+    # print(Bot1.heading_angle)
+    print_box(Bot2.x,Bot2.y,Bot2.length,Bot2.width, Bot2.heading_angle, ax)
+    ax.set_xlim(-5, 15)
+    ax.set_ylim(-5, 15)
+    ax.set_xlabel('X Position')
+    ax.set_ylabel('Y Position')
+    ax.set_title('Dynamic Positioning')
+    ax.legend()
+    ax.grid(True)
