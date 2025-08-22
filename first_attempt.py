@@ -77,6 +77,14 @@ class Bot:
         self.bot_x = 0
         self.bot_y = 0
 
+class gripper:
+    def __init__(self):
+        self.x = 0
+        self.y = 0
+        self.u = 0
+        self.v = 0
+        self.omega = 0
+
 ##################################################################################
 # 2. Define the destination point
 ##################################################################################

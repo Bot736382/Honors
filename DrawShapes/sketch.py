@@ -7,8 +7,10 @@ def print_shape():
 
 def print_box(x,y,length, width, theta, ax):
     # print(f"Box Length: {length}, Width: {width}, Heading Angle: {theta}")
+    phi = math.atan(width/length)
+    k=math.radians(theta)
     diag = math.sqrt(length**2 + width**2)
-    rect = patches.Rectangle((x-(diag*math.cos(theta)/2), y-(diag*math.sin(theta)/2)), length, width, angle=theta,
+    rect = patches.Rectangle((x-(0.5*diag*math.cos(k+phi)), y-(0.5*diag*math.sin(k+phi))), length, width, angle=theta,
                             linewidth=2, edgecolor='blue', facecolor='lightgray')
 
     ax.add_patch(rect)
