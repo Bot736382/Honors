@@ -58,9 +58,17 @@ class box:
 
     def combined_rotate_translate(self):
         pass
-        
+
+class Gripper:
+    def __init__(self):
+        self.x = 0
+        self.y = 0
+        self.u = 0
+        self.v = 0
+        self.omega = 0
+
 class Bot:
-    def __init__(self,x,y, length, width,max_speed):
+    def __init__(self, x, y, length, width, max_speed, gripper: Gripper):
         self.x = x
         self.y = y
 
@@ -77,13 +85,7 @@ class Bot:
         self.bot_x = 0
         self.bot_y = 0
 
-class gripper:
-    def __init__(self):
-        self.x = 0
-        self.y = 0
-        self.u = 0
-        self.v = 0
-        self.omega = 0
+        self.gripper = gripper
 
 ##################################################################################
 # 2. Define the destination point
@@ -133,10 +135,14 @@ def path_add(Box, Destination, Bot1, Bot2, dt):
 # 4. Open loop Code
 ##################################################################################
 
+### Declare the grippers
+gripper1 = Gripper()
+gripper2 = Gripper()
+
 ### Declaring the box and the bots
 box1 = box(0, 0, 0)
-Bot1 = Bot(2, -2, 3,1, 0.5)
-Bot2 = Bot(-2, 2,3,1, 0.5)
+Bot1 = Bot(2, -2, 3,1, 0.5, gripper1)
+Bot2 = Bot(-2, 2,3,1, 0.5, gripper2)
 
 Dest= Destination(10, 10)
 # Time step for simulation
