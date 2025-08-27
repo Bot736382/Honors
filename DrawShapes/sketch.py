@@ -5,7 +5,7 @@ import math
 def print_shape():
     print("This is a box shape.")
 
-def print_box(x,y,length, width, theta, ax):
+def print_bot(x,y,length, width, theta, ax):
     # print(f"Box Length: {length}, Width: {width}, Heading Angle: {theta}")
     phi = math.atan(width/length)
     k=math.radians(theta)
@@ -15,8 +15,8 @@ def print_box(x,y,length, width, theta, ax):
 
     ax.add_patch(rect)
 
-def print_bot():
-    pass
+# def print_box():
+#     pass
 
 
 def print_plot(ax, box1, Bot1, Bot2, Dest):
@@ -25,9 +25,9 @@ def print_plot(ax, box1, Bot1, Bot2, Dest):
     ax.plot(Bot1.x, Bot1.y, 'bo', label='Bot 1')
     ax.plot(Bot2.x, Bot2.y, 'go', label='Bot 2')
     ax.plot(Dest.x, Dest.y, 'yo', label='Destination')
-    print_box(Bot1.x,Bot1.y,Bot1.length,Bot1.width, Bot1.heading_angle, ax)
+    print_bot(Bot1.x,Bot1.y,Bot1.length,Bot1.width, Bot1.heading_angle, ax)
     # print(Bot1.heading_angle)
-    print_box(Bot2.x,Bot2.y,Bot2.length,Bot2.width, Bot2.heading_angle, ax)
+    print_bot(Bot2.x,Bot2.y,Bot2.length,Bot2.width, Bot2.heading_angle, ax)
     ax.set_xlim(-5, 15)
     ax.set_ylim(-5, 15)
     ax.set_xlabel('X Position')

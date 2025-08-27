@@ -36,6 +36,8 @@ class box:
         #In case of debugging, these equations might be the best place to start
         bot_dist = math.sqrt((x2-x1)**2 + (y2-y1)**2) 
         omega = ((x2-x1)*(v2-v1) - (y2-y1)*(u2-u1)) / (bot_dist)**2
+        theta_original+= omega*dt
+        # print(f"Box Orientation: {math.degrees(theta_original)} degrees")
         self.u = u1 + omega*(y1-y_original)
         self.v = v1 - omega*(x1-x_original)
 
@@ -144,7 +146,7 @@ box1 = box(0, 0, 0)
 Bot1 = Bot(2, -2, 3,1, 0.5, gripper1)
 Bot2 = Bot(-2, 2,3,1, 0.5, gripper2)
 
-Dest= Destination(10, 10)
+Dest= Destination(1, 10)
 # Time step for simulation
 dt = 0.1
 
@@ -164,9 +166,8 @@ while dist_f_error(box1, Dest) > 0.1:
     Bot2.v = Bot1.v
 
     path_add(box1, Dest, Bot1, Bot2, dt)
-
     
-    plt.pause(0.05)  # Pause to update the figure
+    plt.pause(0.02)  # Pause to update the figure
 
 plt.ioff()  # Turn off interactive mode
 plt.show()  # Show final frame
