@@ -1,7 +1,5 @@
 import math
 import matplotlib.pyplot as plt
-# import matplotlib
-import matplotlib.patches as patches
 import numpy as np
 from DrawShapes import sketch
 
@@ -50,7 +48,7 @@ class box:
         Bot1.y += self.v *dt
         Bot2.y += self.v *dt
         self.theta += omega *dt
-        print(f"Box Position: ({self.x}, {self.y})")
+        print(f"Object Centroid Position: ({self.x}, {self.y})")
 
     def rotate(self, angle):
         pass
@@ -153,7 +151,7 @@ dt = 0.1
 plt.ion()  # Turn on interactive mode
 fig, ax = plt.subplots()
 
-while dist_f_error(box1, Dest) > 0.1:
+while dist_f_error(box1, Dest) >= 0.1:
     
     sketch.print_plot(ax, box1, Bot1, Bot2, Dest)
     
@@ -175,7 +173,7 @@ plt.show()  # Show final frame
 
 # plot path_x and path_y
 plt.figure()
-plt.plot(path_x, path_y, 'r-', label='Path of the Box')
+plt.plot(path_x, path_y, 'r-', label="Path of the Object's COM")
 plt.plot(Dest.x, Dest.y, 'yo', label='Destination')
 plt.plot(Bot1.path_x, Bot1.path_y, 'b--', label='Path of Bot 1')
 plt.plot(Bot2.path_x, Bot2.path_y, 'g--', label='Path of Bot 2')

@@ -22,7 +22,7 @@ x_traj = [x]
 u_traj = []
 
 # Reference trajectory (sine wave)
-ref_pos = np.sin(np.linspace(0, 10, T+N))  # sine position reference
+ref_pos = 5+np.sin(np.linspace(0, 10, T+N))  # sine position reference
 ref_vel = np.gradient(ref_pos)             # approximate desired velocity
 x_ref = np.vstack((ref_pos, ref_vel))      # shape (2, T+N)
 

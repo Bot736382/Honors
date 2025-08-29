@@ -21,7 +21,7 @@ def print_bot(x,y,length, width, theta, ax):
 
 def print_plot(ax, box1, Bot1, Bot2, Dest):
     ax.clear()  # Clear previous frame
-    ax.plot(box1.x, box1.y, 'ro', label='Box')
+    ax.plot(box1.x, box1.y, 'ro', label='Object')
     ax.plot(Bot1.x, Bot1.y, 'bo', label='Bot 1')
     ax.plot(Bot2.x, Bot2.y, 'go', label='Bot 2')
     ax.plot(Dest.x, Dest.y, 'yo', label='Destination')
