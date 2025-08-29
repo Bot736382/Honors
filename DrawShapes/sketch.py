@@ -26,7 +26,6 @@ def print_plot(ax, box1, Bot1, Bot2, Dest):
     ax.plot(Bot2.x, Bot2.y, 'go', label='Bot 2')
     ax.plot(Dest.x, Dest.y, 'yo', label='Destination')
     print_bot(Bot1.x,Bot1.y,Bot1.length,Bot1.width, Bot1.heading_angle, ax)
-    # print(Bot1.heading_angle)
     print_bot(Bot2.x,Bot2.y,Bot2.length,Bot2.width, Bot2.heading_angle, ax)
     ax.set_xlim(-5, 15)
     ax.set_ylim(-5, 15)
