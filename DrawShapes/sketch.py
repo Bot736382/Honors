@@ -15,8 +15,11 @@ def print_bot(x,y,length, width, theta, ax):
 
     ax.add_patch(rect)
 
-# def print_box():
-#     pass
+def draw_arm(x_B, y_B, l, theta_1, theta_B,ax):
+    line=patches.FancyArrow(x_B, y_B, l*math.cos(math.radians(theta_1+theta_B)), l*math.sin(math.radians(theta_1+theta_B)),
+                      width=0.05, length_includes_head=True, color='green')
+    ax.add_patch(line)
+
 
 
 def print_plot(ax, box1, Bot1, Bot2, Dest):
@@ -27,8 +30,10 @@ def print_plot(ax, box1, Bot1, Bot2, Dest):
     ax.plot(Dest.x, Dest.y, 'yo', label='Destination')
     print_bot(Bot1.x,Bot1.y,Bot1.length,Bot1.width, Bot1.heading_angle, ax)
     print_bot(Bot2.x,Bot2.y,Bot2.length,Bot2.width, Bot2.heading_angle, ax)
-    ax.set_xlim(-5, 15)
-    ax.set_ylim(-5, 15)
+    draw_arm(Bot1.x, Bot1.y, 1, Bot1.arm_angle, Bot1.heading_angle, ax)
+    draw_arm(Bot2.x, Bot2.y, 1, Bot2.arm_angle, Bot2.heading_angle, ax)
+    # ax.set_xlim(-5, 15)
+    # ax.set_ylim(-5, 15)
     ax.set_xlabel('X Position')
     ax.set_ylabel('Y Position')
     ax.set_title('Dynamic Positioning')

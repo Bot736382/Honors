@@ -87,6 +87,9 @@ class Bot:
 
         self.gripper = gripper
 
+        self.arm_length = 1.0  # Length of the arm
+        self.arm_angle = 45.0  # Angle of the arm in degrees
+
 ##################################################################################
 # 2. Define the destination point
 ##################################################################################
@@ -141,10 +144,10 @@ gripper2 = Gripper()
 
 ### Declaring the box and the bots
 box1 = box(0, 0, 0)
-Bot1 = Bot(2, -2, 3,1, 0.5, gripper1)
-Bot2 = Bot(-2, 2,3,1, 0.5, gripper2)
+Bot1 = Bot(2, -2, 0.2, 0.2, 0.2, gripper1)
+Bot2 = Bot(-2, 2,0.2, 0.2, 0.2, gripper2)
 
-Dest= Destination(1, 10)
+Dest= Destination(0.5, 0.9)
 # Time step for simulation
 dt = 0.1
 
@@ -177,8 +180,8 @@ plt.plot(path_x, path_y, 'r-', label="Path of the Object's COM")
 plt.plot(Dest.x, Dest.y, 'yo', label='Destination')
 plt.plot(Bot1.path_x, Bot1.path_y, 'b--', label='Path of Bot 1')
 plt.plot(Bot2.path_x, Bot2.path_y, 'g--', label='Path of Bot 2')
-plt.xlim(-20, 20)
-plt.ylim(-20, 20)
+# plt.xlim(-20, 20)
+# plt.ylim(-20, 20)
 plt.xlabel('X Position')
 plt.ylabel('Y Position')
 plt.title('Initial Positions')
