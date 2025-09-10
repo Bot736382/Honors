@@ -1,5 +1,6 @@
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
 import math
 
 def print_shape():
@@ -16,9 +17,9 @@ def print_bot(x,y,length, width, theta, ax):
     ax.add_patch(rect)
 
 def draw_arm(x_B, y_B, l, theta_1, theta_B,ax):
-    line=patches.FancyArrow(x_B, y_B, l*math.cos(math.radians(theta_1+theta_B)), l*math.sin(math.radians(theta_1+theta_B)),
-                      width=0.05, length_includes_head=True, color='green')
-    ax.add_patch(line)
+    line=mlines.Line2D([x_B, x_B + l*math.cos(math.radians(theta_B + theta_1))],
+                       [y_B, y_B + l*math.sin(math.radians(theta_B + theta_1))], color='red', linewidth=2)
+    ax.add_line(line)
 
 
 
