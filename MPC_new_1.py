@@ -1,3 +1,4 @@
+#### CURRENT IMPLEMENTATION WITHOUT PADDING
 import casadi as ca
 import numpy as np
 import matplotlib.pyplot as plt
@@ -27,19 +28,18 @@ x2g_original = x2_original + q2_2_original*math.cos(q1_2_original)
 y2g_original = y2_original + q2_2_original*math.sin(q1_2_original)
 xc = 0
 yc = 0
-l = math.sqrt((xc-x1g_original)**2 + (yc-y1g_original)**2)
-# print(f"l_const: {l}")
 
+l = math.sqrt((xc-x1g_original)**2 + (yc-y1g_original)**2)
 theta_const = math.atan2(y2g_original-y1g_original, x2g_original-x1g_original) - math.atan2(yc-y1g_original, xc-x1g_original)
-# print(f"theta_const: {theta_const}")
 
 ###########################################################
 # Problem Setup - Hyperparameters Setup
 ###########################################################
 
 dt = 0.1
-N = 10
-T = 50
+N = 20
+print(f"N: {N}")
+T = 200
 
 nu = 10 # [u1_1, u2_1, q1_1, q2_1, q3_1, u1_2, u2_2, q1_2, q2_2, q3_2]
 nx = 10 # [x1, y1, q1_1, q2_1, q3_1, x2, y2, q1_2, q2_2, q3_2]
@@ -47,39 +47,38 @@ nx = 10 # [x1, y1, q1_1, q2_1, q3_1, x2, y2, q1_2, q2_2, q3_2]
 B = dt * np.eye(nx)
 
 # X dot = B * U
-t_grid = np.linspace(0, T*dt, T+N+1)
-x_ref = np.linspace(0, T*dt, T+N+1) 
+t_grid = np.linspace(0, T*dt, T+1) # T+1 sets the array properly with steps of dt
+x_ref = np.linspace(0, T*dt, T+1) 
 y_ref = np.tanh(t_grid)  # Example y reference
 
-P = 20*np.array([[1, 0],
-              [0, 1000]])
+P = 2*np.array([[1, 0],
+              [0, 10]])
 Q = 1
 R = 0.1 * np.eye(nu)
 R_ca = ca.SX(R)
 Rd = 1.0 * np.eye(nu)
 Rd_ca = ca.SX(Rd)
 
-u_min, u_max = -1000, 1000
 d = 0.5 # distance between two robots min threshold
 
 ###########################################################
 # Placeholders
 ############################################################
 
-x = ca.SX.sym('x', nx, N+1)                 # state trajectory
-x_original = ca.SX.sym('x_o', nx, 1)        # state original position
-u = ca.SX.sym('u', nu, N)                   # control trajectory
+x = ca.SX.sym('x', nx, N+1)                         # state trajectory
+x_original = ca.SX.sym('x_o', nx, 1)                # state original position
+u = ca.SX.sym('u', nu, N)                           # control trajectory
 
-object_x = ca.SX.sym('object_x', 1, N+1)    # object COM trajectory
-object_x_0 = ca.SX.sym('object_x_o', 1)     # object COM initial position
-object_y = ca.SX.sym('object_y', 1, N+1)    # object COM trajectory 
-object_y_0 = ca.SX.sym('object_y_o', 1)     # object COM initial position
+object_x = ca.SX.sym('object_x', 1, N+1)            # object COM x trajectory
+object_y = ca.SX.sym('object_y', 1, N+1)            # object COM y trajectory 
+object_x_0 = ca.SX.sym('object_x_o', 1)             # object COM x initial position
+object_y_0 = ca.SX.sym('object_y_o', 1)             # object COM y initial position
 
-object_next_x= ca.SX.sym('object_next_x',1, N+1)
-object_next_y= ca.SX.sym('object_next_y',1, N+1)
+object_next_x= ca.SX.sym('object_next_x',1, N+1)    # Dummy variable for object x iterations
+object_next_y= ca.SX.sym('object_next_y',1, N+1)    # Dummy variable for object y iterations
 
-ref_x_param = ca.SX.sym('ref_x', 1, N+1)         # reference x coordinates for object
-ref_y_param = ca.SX.sym('ref_y', 1, N+1)         # reference y coordinates for object
+ref_x_param = ca.SX.sym('ref_x', 1, N+1)            # reference x coordinates for object
+ref_y_param = ca.SX.sym('ref_y', 1, N+1)            # reference y coordinates for object
 
 # Compute gripper positions using lists (CasADi SX does not support assignment)
 x_g1_list, y_g1_list, x_g2_list, y_g2_list = [], [], [], []
@@ -90,6 +89,7 @@ for i in range(N+1):
     y_g2_list.append(x[6, i] + x[8, i]*ca.sin(x[7, i]))
 
 A_x = ca.vertcat(*x_g1_list)
+# print(A_x.size())
 A_y = ca.vertcat(*y_g1_list)
 B_x = ca.vertcat(*x_g2_list)
 B_y = ca.vertcat(*y_g2_list)
@@ -102,7 +102,6 @@ object_next_y[:,0]= object_y_0
 # Constraints: initial condition + dynamics
 ###############################################################
 g = []
-
 
 g.append(object_next_x[:,0]- object_x_0)
 g.append(object_next_y[:,0]- object_y_0)
@@ -123,8 +122,10 @@ for k in range(N):
         ca.horzcat( B_x[k],  B_y[k], one, zero),
         ca.horzcat( B_y[k], -B_x[k], zero, one)
     )
-    
-    PARAM_T = ca.mtimes(ca.inv(M), ca.vertcat(A_x[k+1], A_y[k+1], B_x[k+1], B_y[k+1]))
+    bvec = ca.vertcat(A_x[k+1], A_y[k+1], B_x[k+1], B_y[k+1])
+    # safer linear solve: M \ b
+    PARAM_T = ca.solve(M + 1e-7*ca.SX.eye(4), bvec)   # small regularization on diagonal
+    # PARAM_T = ca.solve(M + 1e-10*ca.SX.eye(4), bvec)
     object_next_x[:,k+1] = ca.reshape(PARAM_T[0]*object_next_x[:,k] + PARAM_T[1]*object_next_y[:,k] + PARAM_T[2], 1, 1)
     object_next_y[:,k+1] = ca.reshape(PARAM_T[1]*object_next_x[:,k] - PARAM_T[0]*object_next_y[:,k] + PARAM_T[3], 1, 1)
     
@@ -132,23 +133,24 @@ for k in range(N):
     g.append(object_y[:,k+1] - object_next_y[:,k+1])
 
     # Constraint 3: Distance constraint between two robots >=d
-    dist_sq = (x[0, k] - x[5, k])*2 + (x[1, k] - x[6, k])*2
+    dist_sq = (x[0, k] - x[5, k])**2 + (x[1, k] - x[6, k])**2
     g.append(dist_sq - d**2)
 
     # Constraint 4: let q3_1 = 0, q3_2 = 0
     g.append(x[4, k])
     g.append(x[9, k])
 
-
-# print(type(M))
 #################################################################
 # Objective function
 #################################################################
 cost=0
 for k in range(N):
     # Cost 1: track reference
-    err = ca.vertcat(object_x[k+1] - ref_x_param[k+1], object_y[k+1] - ref_y_param[k+1])
+    err = ca.vertcat(object_x[0, k+1] - ref_x_param[0, k+1],
+                 object_y[0, k+1] - ref_y_param[0, k+1])
+    print(err)
     cost += ca.mtimes([err.T, P, err])
+
 
     # Cost 2: minimize control effort
     cost += ca.mtimes([u[:, k].T, R_ca, u[:, k]])
@@ -160,7 +162,6 @@ for k in range(N):
 ###############################################################
 # Optimization problem setup
 ###############################################################
-# print(object_y)
 dec_vars = ca.vertcat(
     ca.reshape(x, -1, 1),
     ca.reshape(u, -1, 1),
@@ -168,15 +169,14 @@ dec_vars = ca.vertcat(
     ca.reshape(object_y, -1, 1)
 )
 g_vec = ca.vertcat(*g)
-# print(g_vec)
 ref_param_x = ca.reshape(ref_x_param, -1, 1)
 ref_param_y = ca.reshape(ref_y_param, -1, 1)
 x_original = ca.reshape(x_original, -1, 1) # Original State
 
-# print(g_vec[2])
-
 nlp = {'f': cost, 'x': dec_vars, 'g': g_vec, 'p': ca.vertcat(x_original, object_x_0, object_y_0, ref_param_x, ref_param_y)}
-solver = ca.nlpsol('solver', 'ipopt', nlp)
+# opts = {'ipopt.print_level': 12, 'print_time': 0, 'ipopt.max_iter': 2000}
+solver = ca.nlpsol('solver', 'ipopt', nlp, {'ipopt.print_level': 0, 'print_time': 0})
+
 
 ###############################################################
 # Bounds
@@ -240,7 +240,7 @@ for k in range(N):
 
     # Constraint 3: Distance constraint between two robots >=d
     lbg += [d**2]
-    ubg += [ca.inf]
+    ubg += [1000]
 
     # Constraint 4: let q3_1 = 0, q3_2 = 0
     lbg += [0]
@@ -249,7 +249,6 @@ for k in range(N):
     lbg += [0]
     ubg += [0]
 
-# print(len(ubg))
 ###############################################################
 # Simulation
 ###############################################################
@@ -263,9 +262,16 @@ object_y_current = np.array([object_COM_y])
 
 
 trajectory = [x_current.copy()] 
-trajectory2 = [object_x_current.copy()]
+trajectory2 = [object_y_current.copy()]
+trajectory3 = [object_x_current.copy()]
 controls = [] 
-for t in range(T): # Set initial state and reference trajectory 
+manan=0
+for t in range(T-N): # Set initial state and reference trajectory 
+    print("##############################################################################################")
+    print(t)
+    print("##############################################################################################")
+    # break # DEBUGGING POINT
+    manan=1
     print(t)
     x0 = x_current 
     objectx0 = object_x_current
@@ -279,7 +285,6 @@ for t in range(T): # Set initial state and reference trajectory
     # Give the solver the states to work on
     init_guess = np.zeros((nx*(N+1) + nu*N +2*(N+1))) 
     
-    print(t+N)
     sol = solver(x0=init_guess, lbx=lbx, ubx=ubx, lbg=lbg, ubg=ubg, p=np.concatenate([x0, objectx0, objecty0, ref_horizon_x, ref_horizon_y])) 
     
     # Extract the optimal control input     
@@ -287,27 +292,31 @@ for t in range(T): # Set initial state and reference trajectory
     u_opt = sol_x[nx*(N+1):nx*(N+1)+nu] 
     
     # Apply the first control input to the system 
-    x_current = x_current + dt * u_opt[0] # simple Euler integration 
+    x_current = x_current + dt * u_opt # simple Euler integration 
     object_x_current = sol_x[nx*(N+1)+nu*N: nx*(N+1)+nu*N+1]
     object_y_current = sol_x[nx*(N+1)+nu*N+ N: nx*(N+1)+ nu*N +N+1]
+    trajectory3.append(object_x_current.copy())
     trajectory2.append(object_y_current.copy())
     trajectory.append(x_current.copy()) 
     # print(f"trajectory: {trajectory}")
     controls.append(u_opt[0]) 
-    
-    # print(f"Time step {t}, State: {x_current}, Control: {u_opt[0]}") 
+    print(f"Time step {t}, State: {x_current}, Control: {u_opt[0]}") 
 
 trajectory = np.array(trajectory) 
 trajectory2 = np.array(trajectory2)
-print(len(trajectory2))
+trajectory3 = np.array(trajectory3)
+# print(len(trajectory2))
 ########################################################### # Plotting results ########################### 
-plt.figure() 
-plt.plot(t_grid[0:T+1], y_ref[0:T+1], 'r--', label='Reference') 
-plt.plot(t_grid[0:T+1], trajectory2[:,:], 'b-', label='State') 
-plt.plot(t_grid[0:T+1], trajectory[:,1], 'g-', label='Bot2')
-plt.plot(t_grid[0:T+1], trajectory[:,0], 'c-', label='Bot2_x')
-plt.plot(t_grid[0:T+1], trajectory[:,6], 'y-', label='Bot1')
-plt.xlabel('Time [s]') 
-plt.ylabel('x') 
-plt.legend() 
-plt.show()
+if manan==1:
+    plt.figure() 
+    plt.plot(t_grid[0:T+1], y_ref[0:T+1], 'r--', label='Reference') 
+    plt.plot(t_grid[0:T+1-N], trajectory2[:,:], 'b-', label='Statey') 
+    plt.plot(t_grid[0:T+1-N], trajectory3[:,:], 'm-', label='Statex')
+    # plt.plot(trajectory3[:,:], trajectory2[:,:], 'b-', label='State')
+    plt.plot(trajectory[:,0], trajectory[:,1], 'g-', label='Bot1')
+    # plt.plot(t_grid[0:T+1-N], trajectory[:,0], 'c-', label='Bot1_x')
+    plt.plot(trajectory[:,5], trajectory[:,6], 'y-', label='Bot2')
+    plt.xlabel('Time [s]') 
+    plt.ylabel('x') 
+    plt.legend() 
+    plt.show()
