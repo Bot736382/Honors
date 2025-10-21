@@ -270,6 +270,10 @@ for t in range(T): # Set initial state and reference trajectory
     x0 = x_current 
     objectx0 = object_x_current
     objecty0 = object_y_current
+    # if t+N <= len(x_ref):
+    #     ref_horizon = x_ref[t:t+N]
+    # else:
+    #     ref_horizon = np.concatenate([x_ref[t:], np.ones(t+N-len(x_ref))*x_ref[-1]])
     ref_horizon_x = x_ref[t+1:t+N+2]
     ref_horizon_y = y_ref[t+1:t+N+2]
     # Give the solver the states to work on
