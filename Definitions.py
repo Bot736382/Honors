@@ -11,7 +11,7 @@ class box:
     def __init__(self,x,y,theta):
         self.x = x #COM for the object
         self.y = y #COM for the object (does not include the bots)
-        self.theta = theta
+        self.theta = theta # Angle pose of the object
         self.u = 0 #Assume originally stationary
         self.v = 0 #Assume originally stationary
     
@@ -65,14 +65,19 @@ class Gripper:
         self.u = 0
         self.v = 0
         self.omega = 0
+        self.theta_2=0
 
 class Bot:
+    # The bot must have it's own x,y, length, width, v_Bx, v_By, theta_B, theta_1, arm_length, theta_2, gripper
     def __init__(self, x, y, length, width, max_speed, gripper: Gripper, arm_len, theta_1):
         # Set position
         self.x = x
         self.y = y
+        self.q1 = math.radians(theta_1)  # Convert to radians
+        self.q2 = arm_len # Length of the arm
+        self.q3 = 0 # gripper angle
 
-        # Set dimensions
+        # Set dimensions of the bot
         self.length=length
         self.width=width
 
@@ -82,21 +87,15 @@ class Bot:
         self.heading_angle = 0
         self.u = 0 # initialise to 0
         self.v = 0 # initialise to 0   
-        self.path_x = []
-        self.path_y = [] 
-
-        self.bot_x = 0
-        self.bot_y = 0
-
-        self.arm_length = arm_len  # Length of the arm
-        self.arm_angle = theta_1  # Angle of the arm in degrees
+        self.path_x = [] # WHILE Coding, adds the positions of the bot to a list
+        self.path_y = [] # WHILE Coding, adds the positions of the bot to a list
         
-        self.gripper = gripper
-        self.gripper.x= x + arm_len * math.cos(math.radians(theta_1))
+        self.gripper = gripper # inherit the gripper class
+        self.gripper.x= self.x + self.arm_length * math.cos(math.radians(self.arm_angle)) 
+        self.gripper.y= self.y + self.arm_length * math.sin(math.radians(self.arm_angle))
         print(f"Gripper x: {self.gripper.x}")
-        self.gripper.y= y + arm_len * math.sin(math.radians(theta_1))
         print(f"Gripper y: {self.gripper.y}")
-        self.theta_2 = 0
+        self.gripper.theta_2 = 0
         
 
 ##################################################################################

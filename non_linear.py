@@ -20,8 +20,8 @@ u = ca.SX.sym('u', nu, N)
 x0 = np.array([0.5, 0.0, 0.5, 0.0, 0.0, 0.0])
 
 # --- Cost matrices
-Q = np.diag([10, 10])  # tracking weight on xp, yp
-R = np.eye(nu) * 0.1   # input weight
+Q = np.diag([12, 12])  # tracking weight on xp, yp
+R = np.eye(nu) * 0.1  # input weight
 
 # --- Objective and constraints
 cost = 0
@@ -40,14 +40,41 @@ for k in range(N):
         xk[4] + uk[0],  # xb
         xk[5] + uk[1]   # yb
     )
-
+    # print(x_next)
     # --- Dynamics equality
+    # 1) dynamics equality (6)
     constraints.append(x[:, k+1] - x_next)
+    lbg += [0.0]*6
+    ubg += [0.0]*6
 
+    # 2) l1 >= 0.2  -> (xk[2] - 0.2) >= 0
+    constraints.append(xk[2] - 0.2)
+    lbg.append(0.0); ubg.append(ca.inf)
+
+    # 3) l1 <= 2.2 -> (xk[2] - 2.2) <= 0
+    constraints.append(xk[2] - 2.2)
+    lbg.append(-ca.inf); ubg.append(0.0)
+
+    # 4) theta >= 0.2
+    constraints.append(xk[3] - 0.2)
+    lbg.append(0.0); ubg.append(ca.inf)
+
+    # 5) theta <= pi/2 - 0.2
+    constraints.append(xk[3] - (np.pi/2 - 0.2))
+    lbg.append(-ca.inf); ubg.append(0.0)
+
+    # 6) distance constraint: distance >= 0.5
+    dist_expr = ca.sqrt((xk[0]-xk[4] - (uk[2]*ca.cos(uk[3])))**2 + (xk[1]-xk[5] - (uk[2]*ca.sin(uk[3])))**2)
+    constraints.append(dist_expr - 0.5)
+    lbg.append(0.0); ubg.append(ca.inf)
     # --- Tracking cost
     x_ref = ca.vertcat(x_ref_traj[k], y_ref_traj[k])
-    cost += ca.mtimes([(xk[0:2] - x_ref).T, Q, (xk[0:2] - x_ref)]) + ca.mtimes([uk.T, R, uk])
-
+    # print(x_ref)
+    # print(xk[0:2])
+    # cost += ca.mtimes([(xk[0:2] - x_ref).T, Q, (xk[0:2] - x_ref)]) + ca.mtimes([uk.T, R, uk])
+    cost += ca.mtimes([(xk[0:2] - x_ref).T, Q, (xk[0:2] - x_ref)])
+    # print(cost) 
+# print(constraints)
 # --- Flatten constraints and variables
 g = ca.vertcat(*constraints)
 opt_vars = ca.vertcat(ca.reshape(x, -1,1), ca.reshape(u, -1,1))
@@ -66,8 +93,8 @@ for k in range(N+1):
     ubx += [2.2]
 
     # theta1
-    lbx += [0]
-    ubx += [2*np.pi]
+    lbx += [0.2]
+    ubx += [np.pi/2-0.2]
 
     # xb, yb: no bounds
     lbx += [-ca.inf, -ca.inf]
@@ -75,12 +102,14 @@ for k in range(N+1):
 
 # input bounds
 for k in range(N):
-    lbx += [-1.0]*nu
-    ubx += [ 1.0]*nu
+    lbx += [-ca.inf, -ca.inf]
+    ubx += [ca.inf, ca.inf]
+    lbx += [-ca.inf, -ca.inf]
+    ubx += [ca.inf, ca.inf]
 
 # constraints bounds (dynamics equality)
-lbg = [0.0]*(nx*N)
-ubg = [0.0]*(nx*N)
+assert len(lbg) == g.size1(), "lbg length mismatch"
+assert len(ubg) == g.size1(), "ubg length mismatch"
 
 # --- Initial guess
 x_init = np.tile(x0.reshape(-1,1), N+1)
