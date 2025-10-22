@@ -37,9 +37,9 @@ theta_const = math.atan2(y2g_original-y1g_original, x2g_original-x1g_original) -
 ###########################################################
 
 dt = 0.1
-N = 20
+N = 5
 print(f"N: {N}")
-T = 200
+T = 20
 
 nu = 10 # [u1_1, u2_1, q1_1, q2_1, q3_1, u1_2, u2_2, q1_2, q2_2, q3_2]
 nx = 10 # [x1, y1, q1_1, q2_1, q3_1, x2, y2, q1_2, q2_2, q3_2]
@@ -51,8 +51,8 @@ t_grid = np.linspace(0, T*dt, T+1) # T+1 sets the array properly with steps of d
 x_ref = np.linspace(0, T*dt, T+1) 
 y_ref = np.tanh(t_grid)  # Example y reference
 
-P = 2*np.array([[1, 0],
-              [0, 10]])
+P = 2*np.array([[100, 0],
+              [0, 100]])
 Q = 1
 R = 0.1 * np.eye(nu)
 R_ca = ca.SX(R)
@@ -239,8 +239,8 @@ for k in range(N):
     ubg += [0]
 
     # Constraint 3: Distance constraint between two robots >=d
-    lbg += [d**2]
-    ubg += [1000]
+    lbg += [0]
+    ubg += [1e10]
 
     # Constraint 4: let q3_1 = 0, q3_2 = 0
     lbg += [0]
@@ -256,7 +256,7 @@ for k in range(N):
 # Initial state
 x0 = np.array([x1_original, y1_original, q1_1_original, q2_1_original, q3_1_original,
                x2_original, y2_original, q1_2_original, q2_2_original, q3_2_original])
-x_current = x0
+x_current = x0.copy()
 object_x_current = np.array([object_COM_x])
 object_y_current = np.array([object_COM_y])
 
@@ -266,13 +266,9 @@ trajectory2 = [object_y_current.copy()]
 trajectory3 = [object_x_current.copy()]
 controls = [] 
 manan=0
-for t in range(T-N): # Set initial state and reference trajectory 
-    print("##############################################################################################")
-    print(t)
-    print("##############################################################################################")
+for t in range(T-N): # Set initial state and reference trajectory \
     # break # DEBUGGING POINT
     manan=1
-    print(t)
     x0 = x_current 
     objectx0 = object_x_current
     objecty0 = object_y_current
@@ -280,8 +276,8 @@ for t in range(T-N): # Set initial state and reference trajectory
     #     ref_horizon = x_ref[t:t+N]
     # else:
     #     ref_horizon = np.concatenate([x_ref[t:], np.ones(t+N-len(x_ref))*x_ref[-1]])
-    ref_horizon_x = x_ref[t+1:t+N+2]
-    ref_horizon_y = y_ref[t+1:t+N+2]
+    ref_horizon_x = x_ref[t:t+N+1]
+    ref_horizon_y = y_ref[t:t+N+1]
     # Give the solver the states to work on
     init_guess = np.zeros((nx*(N+1) + nu*N +2*(N+1))) 
     
@@ -289,12 +285,17 @@ for t in range(T-N): # Set initial state and reference trajectory
     
     # Extract the optimal control input     
     sol_x = sol['x'].full().flatten() 
+    # print(f"sol_x: {sol_x}")
+    init_guess = sol_x.copy() # warm start next optimization
     u_opt = sol_x[nx*(N+1):nx*(N+1)+nu] 
     
     # Apply the first control input to the system 
     x_current = x_current + dt * u_opt # simple Euler integration 
-    object_x_current = sol_x[nx*(N+1)+nu*N: nx*(N+1)+nu*N+1]
-    object_y_current = sol_x[nx*(N+1)+nu*N+ N: nx*(N+1)+ nu*N +N+1]
+    object_x_current = sol_x[nx*(N+1)+(nu*N): nx*(N+1)+(nu*N)+1]
+    object_y_current = sol_x[nx*(N+1)+(nu*N)+ (N+1): nx*(N+1)+ (nu*N) +(N+1)+1]
+    print(len(object_x_current))
+    # object_x_current = sol_x[nx*(N+1)+(nu*N)]
+    # object_y_current = sol_x[nx*(N+1)+(nu*N)+ (N+1)]
     trajectory3.append(object_x_current.copy())
     trajectory2.append(object_y_current.copy())
     trajectory.append(x_current.copy()) 
@@ -305,6 +306,8 @@ for t in range(T-N): # Set initial state and reference trajectory
 trajectory = np.array(trajectory) 
 trajectory2 = np.array(trajectory2)
 trajectory3 = np.array(trajectory3)
+print(trajectory2)
+print(trajectory3)
 # print(len(trajectory2))
 ########################################################### # Plotting results ########################### 
 if manan==1:
@@ -312,7 +315,7 @@ if manan==1:
     plt.plot(t_grid[0:T+1], y_ref[0:T+1], 'r--', label='Reference') 
     plt.plot(t_grid[0:T+1-N], trajectory2[:,:], 'b-', label='Statey') 
     plt.plot(t_grid[0:T+1-N], trajectory3[:,:], 'm-', label='Statex')
-    # plt.plot(trajectory3[:,:], trajectory2[:,:], 'b-', label='State')
+    plt.plot(trajectory3[:,:], trajectory2[:,:], 'b-', label='State')
     plt.plot(trajectory[:,0], trajectory[:,1], 'g-', label='Bot1')
     # plt.plot(t_grid[0:T+1-N], trajectory[:,0], 'c-', label='Bot1_x')
     plt.plot(trajectory[:,5], trajectory[:,6], 'y-', label='Bot2')
