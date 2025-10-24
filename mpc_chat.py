@@ -226,16 +226,18 @@ for k in range(N):
 
     # A_X, A_Y, B_X, B_Y updated automatically in loop
     # pack object_next lists into vertcat expressions
-g.append(A_x[0] - (x[0, 0] + x[3, 0]*ca.cos(x[2, 0])))
-g.append(A_y[0] - (x[1, 0] + x[3, 0]*ca.sin(x[2, 0])))
-g.append(B_x[0] - (x[5, 0] + x[8, 0]*ca.cos(x[7, 0])))
-g.append(B_y[0] - (x[6, 0] + x[8, 0]*ca.sin(x[7, 0])))
+    g.append(A_x[k] - (x[0, k] + x[3, k]*ca.cos(x[2, k])))
+    g.append(A_y[k] - (x[1, k] + x[3, k]*ca.sin(x[2, k])))
+    g.append(B_x[k] - (x[5, k] + x[8, k]*ca.cos(x[7, k])))
+    g.append(B_y[k] - (x[6, k] + x[8, k]*ca.sin(x[7, k])))
+
+    # Distance between grippers and object must be equal to l
 
 # Objective
 cost = 0
 for k in range(N):
-    err = ca.vertcat(object_x[0, k+1] - ref_x_param[0, k+1],
-                     object_y[0, k+1] - ref_y_param[0, k+1])
+    err = ca.vertcat(object_x[0, k] - ref_x_param[0, k],
+                     object_y[0, k] - ref_y_param[0, k])
     cost += ca.mtimes([err.T, P, err])
     cost += ca.mtimes([u[:, k].T, R_ca, u[:, k]])
     dist_err = ca.vertcat((x[0, k]-x[5, k]), (x[1, k]-x[6, k]))
@@ -328,10 +330,10 @@ for k in range(N):
     lbg += [0.0]; ubg += [0.0]
     lbg += [0.0]; ubg += [0.0]
 
-lbg += [0.0]; ubg += [0.0]
-lbg += [0.0]; ubg += [0.0]
-lbg += [0.0]; ubg += [0.0]
-lbg += [0.0]; ubg += [0.0]
+    lbg += [0.0]; ubg += [0.0]
+    lbg += [0.0]; ubg += [0.0]
+    lbg += [0.0]; ubg += [0.0]
+    lbg += [0.0]; ubg += [0.0]
 
 # check lengths
 assert len(lbg) == g_vec.shape[0], f"lbg len {len(lbg)} != g size {g_vec.shape[0]}"
@@ -414,19 +416,28 @@ for t in range(T - N):
     print(f"step {t}: first-control u[0]={u_opt[0]:.4f}, objx={object_x_current[0]:.4f}, objy={object_y_current[0]:.4f}")
 
 # convert to arrays for plotting
-trajectory = np.array(trajectory)            # shape (steps, nx)
+trajectory = np.array(trajectory)           
 trajectory_objx = np.array(trajectory_objx)
 trajectory_objy = np.array(trajectory_objy)
+
+# write to csv
+np.savetxt("mpc_trajectory.csv", trajectory, delimiter=",")
+np.savetxt("mpc_object_trajectory.csv", np.vstack([trajectory_objx, trajectory_objy]).T, delimiter=",")
+
 
 # Plotting
 plt.figure(figsize=(8,6))
 sim_time = np.arange(0, len(trajectory_objx)) * dt
-plt.plot(t_grid[0:len(trajectory_objx)], y_ref[0:len(trajectory_objx)], 'r--', label='Reference y (tanh)')
+# plt.plot(t_grid[0:len(trajectory_objx)], y_ref[0:len(trajectory_objx)], 'r--', label='Reference y (tanh)')
 # plt.plot(sim_time, trajectory_objy, 'b-', label='Object Y (sim)')
 # plt.plot(sim_time, trajectory_objx, 'm-', label='Object X (sim)')
 plt.plot(trajectory_objx, trajectory_objy, 'k-', label='Object XY (path)')
-plt.plot(trajectory[:,0], trajectory[:,1], 'g-', label='Bot1 XY (path)')
-plt.plot(trajectory[:,5], trajectory[:,6], 'y-', label='Bot2 XY (path)')
+plt.plot(trajectory[:,0]+ trajectory[:,3]*np.cos(trajectory[:,2]), trajectory[:,1]+ trajectory[:,3]*np.sin(trajectory[:,2]), 'b-', label='A1 XY (sim)')
+plt.plot(trajectory[:,5]+ trajectory[:,8]*np.cos(trajectory[:,7]), trajectory[:,6]+ trajectory[:,8]*np.sin(trajectory[:,7]), 'm-', label='B1 XY (sim)')
+# plt.plot(trajectory[:,0], trajectory[:,1], 'g-', label='Bot1 XY (path)')
+# plt.plot(trajectory[:,5], trajectory[:,6], 'y-', label='Bot2 XY (path)')
+# plt.plot(sim_time, trajectory[:,3], 'c--', label='A1 gripper length')
+# plt.plot(sim_time, trajectory[:,8], 'r--', label='B1 gripper length')
 plt.xlabel('Time or X')
 plt.ylabel('Position')
 plt.legend()
