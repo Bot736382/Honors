@@ -216,7 +216,7 @@ for k in range(N):
     g.append(object_x[:, k+1] - obj_next_x_list[k+1])
     g.append(object_y[:, k+1] - obj_next_y_list[k+1])
 
-    # 3) distance constraint: dist_sq - d^2 >= 0  -> we encode residual and set lower bound 0 later
+    # 3) distance constraint: dist_sq - d^2 >= 0  
     dist_sq = (x[0, k] - x[5, k])**2 + (x[1, k] - x[6, k])**2
     g.append(dist_sq - d**2)
 
