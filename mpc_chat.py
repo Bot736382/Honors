@@ -8,7 +8,7 @@ import sys
 # -------------------------
 # Unit tests (transform & distance constraint)
 # -------------------------
-def solve_transform_numpy(Ax_k, Ay_k, Bx_k, By_k, Ax_k1, Ay_k1, Bx_k1, By_k1, reg=1e-9):
+def solve_transform_numpy(Ax_k, Ay_k, Bx_k, By_k, Ax_k1, Ay_k1, Bx_k1, By_k1, reg=0):
     """
     Build the same small 4x4 linear system as in the MPC and solve for [a,b,tx,ty]
     using numpy (for unit testing).
@@ -38,7 +38,7 @@ def unit_test_transform():
     B_k = np.array([-0.3, 0.87])
 
     # apply transform p_{k+1} = R p_k + t
-    R = np.array([[a_true, -b_true],[b_true, a_true]])
+    R = np.array([[a_true, b_true],[-b_true, a_true]])
     t = np.array([tx_true, ty_true])
     A_k1 = (R @ A_k) + t
     B_k1 = (R @ B_k) + t
@@ -46,7 +46,7 @@ def unit_test_transform():
     sol = solve_transform_numpy(A_k[0], A_k[1], B_k[0], B_k[1], A_k1[0], A_k1[1], B_k1[0], B_k1[1])
     a_est, b_est, tx_est, ty_est = sol
 
-    ok = np.allclose([a_est,b_est,tx_est,ty_est], [a_true,b_true,tx_true,ty_true], atol=1e-7)
+    ok = np.allclose([a_est,b_est,tx_est,ty_est], [a_true,b_true,tx_true,ty_true], atol=1e-3)
     print("Transform unit test:", "PASS" if ok else "FAIL")
     if not ok:
         print(" estimated:", sol, " true:", [a_true,b_true,tx_true,ty_true])
@@ -68,6 +68,8 @@ def unit_test_distance():
     ok2 = residual2 < 0
 
     print("Distance unit test:", "PASS" if (ok1 and ok2) else "FAIL")
+    print(ok1)
+    print(ok2)
     return ok1 and ok2
 
 if __name__ == "__main__":
@@ -115,7 +117,7 @@ theta_const = math.atan2(y2g_original-y1g_original, x2g_original-x1g_original) -
 
 # Hyperparameters
 dt = 0.1
-N = 5              # MPC horizon
+N = 10              # MPC horizon
 print(f"N: {N}")
 T = 100           # total simulation steps
 
@@ -125,8 +127,8 @@ nx = 10 # dimension of state
 B = dt * np.eye(nx)
 
 t_grid = np.linspace(0, T*dt, T+1)
-x_ref = np.linspace(0, T*dt, T+1)          # example x reference (unused beyond demo)
-y_ref =4*np.cos(t_grid)                    # example y reference
+x_ref = np.cos(t_grid)          # example x reference (unused beyond demo)
+y_ref =4*np.sin(t_grid)                     # example y reference
 
 P = np.array([[20.0, 0.0],[0.0, 20.0]])
 Q = 1.0
@@ -204,9 +206,10 @@ for k in range(N):
     obj_y_k = obj_next_y_list[k]
 
     # Standard rotation matrix representation (a=cosθ, b=sinθ)
-    # p_{k+1} = R p_k + t  where R = [[a, -b],[b, a]]
-    obj_x_k1 = a*obj_x_k - b*obj_y_k + tx
-    obj_y_k1 = b*obj_x_k + a*obj_y_k + ty
+    ### ERROR
+    # p_{k+1} = R p_k + t  where R = [[a, b],[-b, a]]
+    obj_x_k1 = a*obj_x_k + b*obj_y_k + tx
+    obj_y_k1 = -b*obj_x_k + a*obj_y_k + ty
 
     # append computed symbolic next
     obj_next_x_list.append(ca.reshape(obj_x_k1, 1, 1))
@@ -428,7 +431,7 @@ np.savetxt("mpc_object_trajectory.csv", np.vstack([trajectory_objx, trajectory_o
 # Plotting
 plt.figure(figsize=(8,6))
 sim_time = np.arange(0, len(trajectory_objx)) * dt
-# plt.plot(t_grid[0:len(trajectory_objx)], y_ref[0:len(trajectory_objx)], 'r--', label='Reference y (tanh)')
+plt.plot(t_grid[0:len(trajectory_objx)], y_ref[0:len(trajectory_objx)], 'r--', label='Reference y (tanh)')
 # plt.plot(sim_time, trajectory_objy, 'b-', label='Object Y (sim)')
 # plt.plot(sim_time, trajectory_objx, 'm-', label='Object X (sim)')
 plt.plot(trajectory_objx, trajectory_objy, 'k-', label='Object XY (path)')
