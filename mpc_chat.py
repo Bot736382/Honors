@@ -2,6 +2,7 @@
 import casadi as ca
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.animation as ani
 import math
 import sys
 
@@ -78,6 +79,7 @@ if __name__ == "__main__":
     t2 = unit_test_distance()
     if not (t1 and t2):
         print("Unit tests failed - stop. Fix unit test failures first.")
+        sys.exit(1)
     else:
         print("All unit tests passed. Proceeding to run MPC simulation...")
 
@@ -127,13 +129,18 @@ nx = 10 # dimension of state
 B = dt * np.eye(nx)
 
 t_grid = np.linspace(0, T*dt, T+1)
-x_ref = np.cos(t_grid)          # example x reference (unused beyond demo)
-y_ref =4*np.sin(t_grid)                     # example y reference
+x_ref = np.linspace(0, T*dt, T+1)          # example x reference (unused beyond demo)
+y_ref =2*x_ref
+# y_ref =4*np.sin(t_grid)                     # example y reference
 
 P = np.array([[20.0, 0.0],[0.0, 20.0]])
-Q = 1.0
-R = 0.1 * np.eye(nu)
-R_ca = ca.SX(R)
+Q = 10.0
+# R = 0.1 * np.eye(nu)
+# R = np.array([u1, u2, u3, u4, u5, u6, u7, u8, u9, u10])
+R = np.array([1.0, 1.0, 0.1, 0.1, 0.1, 1.0, 1, 0.1, 0.1, 0.1])
+diag_R = 5*np.diag(R)
+# print(diag_R)
+R_ca = ca.SX(diag_R)
 
 d = 0.5 # min distance
 
@@ -245,6 +252,7 @@ for k in range(N):
     cost += ca.mtimes([u[:, k].T, R_ca, u[:, k]])
     dist_err = ca.vertcat((x[0, k]-x[5, k]), (x[1, k]-x[6, k]))
     cost += ca.mtimes([dist_err.T, Q * ca.DM.eye(2), dist_err])
+
 
 # Decision variables vector
 dec_vars = ca.vertcat(
@@ -422,28 +430,44 @@ for t in range(T - N):
 trajectory = np.array(trajectory)           
 trajectory_objx = np.array(trajectory_objx)
 trajectory_objy = np.array(trajectory_objy)
+controls_final = np.array(controls)
 
 # write to csv
 np.savetxt("mpc_trajectory.csv", trajectory, delimiter=",")
 np.savetxt("mpc_object_trajectory.csv", np.vstack([trajectory_objx, trajectory_objy]).T, delimiter=",")
 
 
-# Plotting
+# Plotting the trajectories and controls in 2 subplots
 plt.figure(figsize=(8,6))
 sim_time = np.arange(0, len(trajectory_objx)) * dt
-plt.plot(t_grid[0:len(trajectory_objx)], y_ref[0:len(trajectory_objx)], 'r--', label='Reference y (tanh)')
+# plt.plot(t_grid[0:len(trajectory_objx)], y_ref[0:len(trajectory_objx)], 'r--', label='Reference y (tanh)')
+plt.plot(x_ref[0:len(trajectory_objx)], y_ref[0:len(trajectory_objx)], 'r--', label='Reference path (x,y)')
 # plt.plot(sim_time, trajectory_objy, 'b-', label='Object Y (sim)')
 # plt.plot(sim_time, trajectory_objx, 'm-', label='Object X (sim)')
 plt.plot(trajectory_objx, trajectory_objy, 'k-', label='Object XY (path)')
-plt.plot(trajectory[:,0]+ trajectory[:,3]*np.cos(trajectory[:,2]), trajectory[:,1]+ trajectory[:,3]*np.sin(trajectory[:,2]), 'b-', label='A1 XY (sim)')
-plt.plot(trajectory[:,5]+ trajectory[:,8]*np.cos(trajectory[:,7]), trajectory[:,6]+ trajectory[:,8]*np.sin(trajectory[:,7]), 'm-', label='B1 XY (sim)')
-# plt.plot(trajectory[:,0], trajectory[:,1], 'g-', label='Bot1 XY (path)')
-# plt.plot(trajectory[:,5], trajectory[:,6], 'y-', label='Bot2 XY (path)')
+# plt.plot(trajectory[:,0]+ trajectory[:,3]*np.cos(trajectory[:,2]), trajectory[:,1]+ trajectory[:,3]*np.sin(trajectory[:,2]), 'b-', label='A1 XY (sim)')
+# plt.plot(trajectory[:,5]+ trajectory[:,8]*np.cos(trajectory[:,7]), trajectory[:,6]+ trajectory[:,8]*np.sin(trajectory[:,7]), 'm-', label='B1 XY (sim)')
+plt.plot(trajectory[:,0], trajectory[:,1], 'g-', label='Bot1 XY (path)')
+plt.plot(trajectory[:,5], trajectory[:,6], 'y-', label='Bot2 XY (path)')
 # plt.plot(sim_time, trajectory[:,3], 'c--', label='A1 gripper length')
 # plt.plot(sim_time, trajectory[:,8], 'r--', label='B1 gripper length')
 plt.xlabel('Time or X')
 plt.ylabel('Position')
 plt.legend()
 plt.title('MPC simulation: robot paths and object trajectory')
+plt.savefig("MPC_simulation_R_non_0.png")
+plt.grid(True)
+
+plt.figure(figsize=(8,6))
+# plt.subplot(2,1,2)
+plt.plot(sim_time[0:len(controls_final)], controls_final[:,0], 'b-', label='x-vel Bot1')
+plt.plot(sim_time[0:len(controls_final)], controls_final[:,5], 'r-', label='x-vel Bot2')
+plt.plot(sim_time[0:len(controls_final)], controls_final[:,1], 'b--', label='y-vel Bot1')
+plt.plot(sim_time[0:len(controls_final)], controls_final[:,6], 'r--', label='y-vel Bot2')
+plt.xlabel('Time')
+plt.ylabel('Velocity controls')
+plt.legend()
+plt.title('MPC simulation: control inputs over time')
+plt.savefig("Controls_with_R_non_0.png")
 plt.grid(True)
 plt.show()
