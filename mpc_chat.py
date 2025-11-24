@@ -471,3 +471,144 @@ plt.title('MPC simulation: control inputs over time')
 plt.savefig("Controls_with_R_non_0.png")
 plt.grid(True)
 plt.show()
+
+# ...existing code...
+
+# -------------------------
+# Animation of robot trajectories
+# -------------------------
+def animate_robots(trajectory, trajectory_objx, trajectory_objy, x_ref, y_ref, dt, save_path="robot_animation.mp4"):
+    """
+    Animate two robots as triangles with centroid and heading direction.
+    trajectory: (T, nx) array where columns are [x1, y1, q1_1, q2_1, q3_1, x2, y2, q1_2, q2_2, q3_2]
+    trajectory_objx, trajectory_objy: object center trajectory
+    x_ref, y_ref: reference trajectory
+    dt: time step
+    save_path: output video file
+    """
+    fig, ax = plt.subplots(figsize=(10, 8))
+    
+    # triangle size (half-width and height for visualization)
+    tri_size = 0.15
+    
+    def get_triangle(cx, cy, heading):
+        """
+        Return 3 vertices of a triangle centered at (cx, cy) 
+        with heading direction pointing outward.
+        heading: angle in radians
+        """
+        # triangle points in local frame (before rotation)
+        local_pts = np.array([
+            [tri_size, 0],        # front corner (tip)
+            [-tri_size, tri_size],  # back-left
+            [-tri_size, -tri_size]  # back-right
+        ])
+        # rotation matrix
+        R = np.array([[np.cos(heading), -np.sin(heading)],
+                      [np.sin(heading), np.cos(heading)]])
+        # rotate and translate
+        rotated = local_pts @ R.T
+        vertices = rotated + np.array([cx, cy])
+        return vertices
+    
+    def init_anim():
+        ax.clear()
+        return []
+    
+    def animate(frame):
+        ax.clear()
+        
+        # extract positions from trajectory
+        x1, y1, q1_1, q2_1, q3_1 = trajectory[frame, 0], trajectory[frame, 1], trajectory[frame, 2], trajectory[frame, 3], trajectory[frame, 4]
+        x2, y2, q1_2, q2_2, q3_2 = trajectory[frame, 5], trajectory[frame, 6], trajectory[frame, 7], trajectory[frame, 8], trajectory[frame, 9]
+        
+        # object position
+        obj_x = trajectory_objx[frame]
+        obj_y = trajectory_objy[frame]
+        
+        # compute gripper positions
+        x1g = x1 + q2_1 * np.cos(q1_1)
+        y1g = y1 + q2_1 * np.sin(q1_1)
+        x2g = x2 + q2_2 * np.cos(q1_2)
+        y2g = y2 + q2_2 * np.sin(q1_2)
+        
+        # plot reference trajectory
+        ax.plot(x_ref[0:len(trajectory_objx)], y_ref[0:len(trajectory_objx)], 'r--', linewidth=2, label='Reference path')
+        
+        # plot object trajectory up to current frame
+        ax.plot(trajectory_objx[0:frame+1], trajectory_objy[0:frame+1], 'k-', linewidth=1.5, label='Object trajectory')
+        
+        # plot bot1 trajectory up to current frame
+        ax.plot(trajectory[0:frame+1, 0], trajectory[0:frame+1, 1], 'g-', linewidth=1, alpha=0.6, label='Bot1 trajectory')
+        
+        # plot bot2 trajectory up to current frame
+        ax.plot(trajectory[0:frame+1, 5], trajectory[0:frame+1, 6], 'b-', linewidth=1, alpha=0.6, label='Bot2 trajectory')
+        
+        # draw bot1 as triangle with heading
+        tri1 = get_triangle(x1, y1, q1_1)
+        tri1_patch = plt.Polygon(tri1, fill=True, edgecolor='green', facecolor='lightgreen', linewidth=2, alpha=0.7)
+        ax.add_patch(tri1_patch)
+        
+        # draw heading line for bot1 (from centroid to front corner)
+        front1 = tri1[0]
+        ax.plot([x1, front1[0]], [y1, front1[1]], 'g-', linewidth=2, label='Bot1 heading')
+        
+        # draw line from bot1 centroid to gripper
+        ax.plot([x1, x1g], [y1, y1g], 'g--', linewidth=1.5, alpha=0.8, label='Bot1 gripper arm')
+        
+        # draw bot2 as triangle with heading
+        tri2 = get_triangle(x2, y2, q1_2)
+        tri2_patch = plt.Polygon(tri2, fill=True, edgecolor='blue', facecolor='lightblue', linewidth=2, alpha=0.7)
+        ax.add_patch(tri2_patch)
+        
+        # draw heading line for bot2
+        front2 = tri2[0]
+        ax.plot([x2, front2[0]], [y2, front2[1]], 'b-', linewidth=2, label='Bot2 heading')
+        
+        # draw line from bot2 centroid to gripper
+        ax.plot([x2, x2g], [y2, y2g], 'b--', linewidth=1.5, alpha=0.8, label='Bot2 gripper arm')
+        
+        # plot object center
+        ax.plot(obj_x, obj_y, 'ko', markersize=10, label='Object center')
+        
+        # gripper positions (markers)
+        ax.plot(x1g, y1g, 'g^', markersize=8, label='Bot1 gripper')
+        ax.plot(x2g, y2g, 'b^', markersize=8, label='Bot2 gripper')
+        
+        # set axis properties
+        ax.set_aspect('equal')
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc='upper left', fontsize=8)
+        ax.set_xlabel('X position')
+        ax.set_ylabel('Y position')
+        ax.set_title(f'Robot Animation - Step {frame} / {len(trajectory)-1} (time={frame*dt:.2f}s)')
+        
+        return ax.patches + ax.lines
+    
+    # create animation
+    anim = ani.FuncAnimation(fig, animate, init_func=init_anim, frames=len(trajectory), 
+                            interval=100, blit=False, repeat=True)
+    
+    # save animation
+    # save animation
+    gif_path = save_path.replace('.mp4', '.gif')
+    try:
+        anim.save(save_path, writer='ffmpeg', fps=10, dpi=100)
+        print(f"✓ MP4 animation saved to {save_path}")
+    except Exception as e:
+        print(f"⚠ ffmpeg not available: {e}")
+        print(f"Saving as GIF instead to {gif_path}...")
+        try:
+            # fallback to PIL (pillow) — supports .gif
+            anim.save(gif_path, writer='pillow', fps=10)
+            print(f"✓ GIF animation saved to {gif_path}")
+        except Exception as e2:
+            print(f"⚠ GIF save also failed: {e2}")
+            print("Showing animation live instead...")
+            plt.show()
+    
+    plt.close()
+
+# Run animation
+print("Generating animation...")
+animate_robots(trajectory, trajectory_objx, trajectory_objy, x_ref, y_ref, dt, save_path="robot_animation.mp4")
