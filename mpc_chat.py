@@ -40,7 +40,7 @@ def animate_robots(trajectory, trajectory_objx, trajectory_objy, x_ref, y_ref, d
     fig, ax = plt.subplots(figsize=(10, 8))
     
     # triangle size (half-width and height for visualization)
-    triangle_size = 0.5
+    triangle_size = 0.25
     
     def get_triangle(cx, cy, heading, tri_size):
         # triangle points in local frame (before rotation)
@@ -118,8 +118,8 @@ def animate_robots(trajectory, trajectory_objx, trajectory_objy, x_ref, y_ref, d
         ax.plot(obj_x, obj_y, 'ko', markersize=10, label='Object center')
         
         # gripper positions (markers)
-        ax.plot(x1g, y1g, 'g^', markersize=8, label='Bot1 gripper')
-        ax.plot(x2g, y2g, 'b^', markersize=8, label='Bot2 gripper')
+        ax.plot(x1g, y1g, 'g^', markersize=6, label='Bot1 gripper')
+        ax.plot(x2g, y2g, 'b^', markersize=6, label='Bot2 gripper')
         
         # set axis properties
         ax.set_aspect('equal')
@@ -245,7 +245,8 @@ yc = 0.0
 
 l = math.sqrt((xc-x1g_original)**2 + (yc-y1g_original)**2)
 theta_const = math.atan2(y2g_original-y1g_original, x2g_original-x1g_original) - math.atan2(yc-y1g_original, xc-x1g_original)
-
+l1 = math.sqrt((object_COM_x-x1g_original)**2 + (object_COM_y-y1g_original)**2)
+l2 = math.sqrt((object_COM_x-x2g_original)**2 + (object_COM_y-y2g_original)**2)
 # Hyperparameters
 dt = 0.1
 N = 10              # MPC horizon
@@ -370,7 +371,11 @@ for k in range(N):
     g.append(B_x[k] - (x[5, k] + x[8, k]*ca.cos(x[7, k])))
     g.append(B_y[k] - (x[6, k] + x[8, k]*ca.sin(x[7, k])))
 
-    # Distance between grippers and object must be equal to l
+    # # Distance between grippers and object must be equal to l1, l2
+    # dist1_sq = (object_x[:, k] - (x[0, k] + x[3, k]*ca.cos(x[2, k])))**2 + (object_y[:, k] - (x[1, k] + x[3, k]*ca.sin(x[2, k])))**2
+    # g.append(dist1_sq - l1**2)
+    # dist2_sq = (object_x[:, k] - (x[5, k] + x[8, k]*ca.cos(x[7, k])))**2 + (object_y[:, k] - (x[6, k] + x[8, k]*ca.sin(x[7, k])))**2
+    # g.append(dist2_sq - l2**2)
 
 # Objective
 cost = 0
@@ -474,6 +479,10 @@ for k in range(N):
     lbg += [0.0]; ubg += [0.0]
     lbg += [0.0]; ubg += [0.0]
     lbg += [0.0]; ubg += [0.0]
+
+    # # distance constraints for grippers to object
+    # lbg += [0.0]; ubg += [0.0]
+    # lbg += [0.0]; ubg += [0.0]
 
 # check lengths
 assert len(lbg) == g_vec.shape[0], f"lbg len {len(lbg)} != g size {g_vec.shape[0]}"
