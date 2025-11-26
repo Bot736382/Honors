@@ -40,7 +40,7 @@ def animate_robots(trajectory, trajectory_objx, trajectory_objy, x_ref, y_ref, d
     fig, ax = plt.subplots(figsize=(10, 8))
     
     # triangle size (half-width and height for visualization)
-    triangle_size = 0.7
+    triangle_size = 0.5
     
     def get_triangle(cx, cy, heading, tri_size):
         # triangle points in local frame (before rotation)
@@ -53,8 +53,8 @@ def animate_robots(trajectory, trajectory_objx, trajectory_objy, x_ref, y_ref, d
         R = np.array([[np.cos(heading), -np.sin(heading)],
                       [np.sin(heading), np.cos(heading)]])
         # rotate and translate
-        rotated = local_pts @ R
-        vertices = rotated + np.array([cx, cy])
+        rotated = R @ local_pts.T  
+        vertices = rotated.T + np.array([cx, cy])
         return vertices
     
     def init_anim():
@@ -678,3 +678,11 @@ if (plot_count == 1):
 if (animation_count==1):
     print("Generating animation...")
     animate_robots(trajectory, trajectory_objx, trajectory_objy, x_ref, y_ref, dt, save_path="robot_animation.mp4")
+
+for i in range(len(trajectory_objx)):
+    # print distance between grippers and object
+    dist = np.sqrt((trajectory_objx[i] - trajectory[i, 0])**2 + (trajectory_objy[i] - trajectory[i, 1])**2)
+    # print distance between the two bots
+    dist_bots = np.sqrt((trajectory[i, 0] - trajectory[i, 5])**2 + (trajectory[i, 1] - trajectory[i, 6])**2)
+    print(f"Step {i}: distance between the bots: {dist_bots:.4f}")
+
