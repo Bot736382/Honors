@@ -1,0 +1,631 @@
+\documentclass[12pt,english]{report}
+
+% Encoding and Font
+\usepackage[T1]{fontenc}
+
+% Geometry (Margins)
+\usepackage[top=2cm, bottom=2.5cm, left=2cm, right=2cm]{geometry}
+\geometry{verbose}
+
+% Math Packages
+\usepackage{amsmath, amstext, amsfonts}
+
+% Colors and Highlighting
+\usepackage[dvipsnames]{xcolor}  
+\definecolor{DGreen}{RGB}{0,100,20}    
+\usepackage{soul} % Highlighting
+
+% Figures and Graphics
+\usepackage{graphicx, float, subcaption}
+
+% Code Formatting
+\usepackage{minted}
+\usepackage{listings}
+
+% Hyperlinks
+\usepackage[hidelinks]{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    urlcolor=cyan
+}
+\usepackage{cleveref}
+
+% TikZ for Diagrams
+\usepackage{tikz}   
+
+% Symbols
+\usepackage{wasysym}    
+\usepackage{concmath}
+% Language Support
+\usepackage{babel}      
+
+% Table Formatting
+\usepackage{array}      
+
+% Title and Author
+\title{
+    \includegraphics[width=10cm]{iitblogo.png}\\
+    \textbf{{\Huge Trajectory Tracking for Multiactuated Bots}}\\ 
+    \huge{ME 494: Bachelors Thesis Project 1}
+}      
+\author{
+    \LARGE\sffamily \color{Blue} 
+    Manan Mehta(22b2129)
+}
+\date{\vspace{2cm}}
+
+% Fancy Headers and Footers
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{} % Clear default settings
+\renewcommand{\footrulewidth}{0.5pt}
+\chead{\leftmark} 
+\renewcommand{\chaptermark}[1]{\markboth{#1}{}}
+\cfoot{\thepage}
+\lfoot{22b2129} 
+\rfoot{ME 494}
+
+% Title Formatting
+\usepackage[explicit]{titlesec}
+
+\titleformat{\chapter}[display]
+{\normalfont\huge\bfseries}{\chaptertitlename\ \thechapter}{20pt}{\Huge #1}
+
+\titleformat{\chapter}[display]
+{\normalfont\huge\bfseries}{}{0pt}{\Huge #1}
+
+% \titleformat{\section}
+% {\normalfont\large\bfseries}{}{1em}{#1}
+
+% Custom Commands
+\newcommand{\var}{\text{Var}}
+\newcommand{\cov}{\text{Cov}}
+\newcommand{\cor}{\text{Cor}}
+\renewcommand{\c}[1]{\texttt{#1}} % Modify existing command
+
+% \renewcommand{\thesection}{\arabic{section}}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+\chapter{Acknowledgements}
+I would like to express my sincere gratitude to Prof. Anirban Guha and Prof. Arpita Sinha for their guidance throughout the course of this thesis. Prof. Arpita Sinha provided clear direction and valuable feedback that helped refine both the technical content and its presentation. Prof. Anirban Guha offered crucial insights, constructive discussions, and consistent support, all of which significantly shaped the development of this work.\\
+\\  
+I am also thankful to my peers, friends, and family for their encouragement and understanding during the completion of this project.
+% \chapter{MPC implementation for basic schemes}
+
+% \chapter{Literature Review}
+% \section{Keshab's thesis}
+
+% % \section{Prof Bertsekas Lectures}
+
+% \section{MPC based control}
+% Model Predictive Control is a control algorithm which allows for control be predicting subsequent `n' steps at every point of motion and accordingly modifying the controls for the system.
+% % \subsection*{How does it work: Mathematical Formulation}
+% \section{Barrier Lyapunov function}
+
+
+\chapter{Abstract}
+This thesis investigates the problem of coordinated trajectory tracking for a multi-actuated robotic system consisting of mobile omnidirectional bases equipped with planar revolute-prismatic-revolute (R-P-R) manipulators. The objective is to enable a team of robots to cooperatively manipulate and transport a rigid object along a prescribed trajectory while maintaining continuous contact, enforcing geometric constraints, and avoiding inter-robot collisions.\\
+\\
+A kinematic model for the bot-arm system is developed, followed by a formal description of object-bot interaction under rigid-body constraints for both two and multiple end-effector configurations. Two Model Predictive Control (MPC) formulations are proposed. The first formulation employs angle-based constraints but encounters numerical instability due to discontinuities introduced by the atan2 function. The second formulation re-parameterizes object orientation using linear constraints on $\cos(\theta)$ and $\sin(\theta)$, resulting in improved numerical behavior. Simulation results presented here demonstrate successful trajectory tracking and highlight the effect of the control effort penalty R on smoothness and stability of robot motion.\\
+\\
+The work establishes a foundation for extending cooperative manipulation to higher-dimensional tasks and larger robot teams. It also prepares the groundwork for transitioning from a centralized MPC architecture to a decentralized reinforcement-learning-based controller, which is proposed as future work.
+
+
+
+
+
+\chapter{Defining the Problem}
+To define the problem, the report first define the constituent moving parts of the entire system and define how they affect each other.
+\section{Bot}
+In this pdf, `bot' has loosely been used to address the base of the mobile robot + the arm effector mounted on top of it. The bot is omnidirectional in nature and can move in any direction in the 2d plane. The arm effector mounted on top of it can also move in a revolute-prismatic-revolute manner to position the end-effector at any point in the 2d plane.\\
+\textbf{Inputs:} x, y, max speed ($v$)\\
+Other possible expected inputs for the bot will include: bot\_base x,y and the height at which the arm effector has to remain at. A detailed design (including the urdf) will bring in more paramaters for the inverse kinematic positioning of the end effector.
+% \textbf{Expected Outputs:}
+% \begin{itemize}
+%     \item \vspace{-10pt} u
+%     \item \vspace{-10pt} v
+% \end{itemize}
+% This will over time incorporate more features, including z-orientations of the end-effectors, the positioning of the base of the mobile robot, wheel speeds for the Mecanum wheels (?).
+\section{Object}
+The `object' refers to the particular item that has to be transported by the bots from one location in space to the other. The definition of the object requires particular geometries assigned to it, as that can be attributed to making the bot move in particular orientations in the 2d plane. Further, an analysis into 3d movements subsequently will potentially lead to differences in z-orientations for the end effectors.
+\section{Destination and/or Trajectories}
+The problem at hand assumes a trajectory with some randomly assigned velocities for the center of mass of the object to follow. The different bots will have different speeds so that the object can have necessary speeds as well as angular velocities.
+
+\section{Object-Bot Interaction}
+The bots push the object and can move omni-directionally in the x-y plane. if both bots move in the same direction, the object translates, if one moves, other doesn't it's rotation. Thus, this is essentially a rigid body kinematics problem. Thus, what is needed is probably to know how and where the bots pick the obj   ect up. \\ \\
+Apart from this, the distance between the gripper of the bot and the object's COM:\\ $\sqrt{(x_\text{bot, gripper} - x_\text{COM of object})^2 + (y_\text{bot, gripper} - y_\text{COM of object})^2}$ as well as the angle formed between any three points on the object is constant. i.e. $r$ and $\theta$ of bot's gripper relative to object is constant for the current problem.
+\subsection{2 Arm Effectors - Object  interaction}
+To describe the kinematics of the object (subsequently referred to as box or object), it is quite evident that the entire object + end-effectors be treated as rigid bodies. Since the bots always maintain contact with the object at all times, the speed at which the bots move is equivalent to the local points on the object. 
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\linewidth]{2-Arm_effector.png}
+    \caption{Schematic of the object with the red dots being the end-effectors of the bots}
+\end{figure} 
+To start off with, we define the coordinates of the Center of Mass (COM) of the body as well as the positions of the bots with respect to an arbitrarily placed fixed frame of reference. Let the COM of the body be $\{x_p, y_p\}$ and the centers for the grippers be $\{x_{G,1}, y_{G,1}\}$ and $\{x_{G,2}, y_{G,2}\}$ respectively. The control inputs for such systems lie with the bot's grippers and manipulators. Thus, we can effectively control the velocities and angular velocity($\omega$) for the end-effector of 1 bot-effector system and thus calculate velocities ($u_p, v_p$) for the COM accordingly.
+\begin{equation}
+    \begin{bmatrix}
+u_{G,1} \hat{i} + v_{G,1} \hat{j} \\
+u_{G,2} \hat{i} + v_{G,2} \hat{j}
+\end{bmatrix} = (u_p \hat{i} + v_p \hat{j}) + \Vec{\omega} \times \begin{bmatrix}
+    \Vec{r_1} - \Vec{r_p} \\
+    \Vec{r_2} - \Vec{r_p} 
+\end{bmatrix}
+\label{Equation 1}
+\end{equation}
+Solving $u_P, v_P$ using arm effectors 1 and 2, we get:
+\begin{equation}
+     u_p = u_{G,1} + \omega (y_{G,1} - y_p) = u_{G,2} + \omega (y_{G,2} - y_p)
+\end{equation}
+\begin{equation}
+    v_p = v_{G,1} - \omega (x_{G,1} - x_p) = v_{G,2} - \omega (x_{G,2} - x_p)
+\end{equation}
+Thus, $u_1$ and $u_2$ are related to each other by $\omega$ and so are $v_1$ and $v_2$
+
+
+
+
+
+\subsection{Multiple Arm Effectors - Object interaction}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\linewidth]{Multiple-Arm_effectors.png}
+    \caption{Object with multiple end Effectors on its surface }
+\end{figure}
+\begin{equation}
+    \begin{bmatrix}
+u_1 \hat{i} + v_1 \hat{j} \\
+u_2 \hat{i} + v_2 \hat{j} \\
+\dots \\
+u_N \hat{i} + v_N \hat{j} \\
+\end{bmatrix} = (u_p \hat{i} + v_p \hat{j}) + \Vec{\omega} \times \begin{bmatrix}
+    \Vec{r_1} - \Vec{r_p}  \\
+    \Vec{r_2} - \Vec{r_p}  \\
+    \dots \\
+    \Vec{r_N} - \Vec{r_p} 
+\end{bmatrix}
+\end{equation}
+This is essentially multiple equations but limited variables and hence for a solution set to exist, the solution set will lie in the Null space of the 2-arm effector solution set. In a more physical sense, since all of these arms lie on the rigid body of the object, it is constrained to move in certain ways. i.e. based on any 1 effector, and known locations of the other arm effectors in respect to any two arms or the center of mass of the object, the motion of the other arms will be pre-determined essentially. If this is not followed, there will be internal stresses developed within the object and can lead to deformations (local and/or global elongations and compressions)
+% \section{Basic Proportional controller}
+% \begin{figure}[H]
+%     \centering
+%     \begin{subfigure}[b]{0.45\textwidth}
+%         \includegraphics[width=\linewidth]{Plot_1_section_personal_notes.png}
+%         % \caption{Caption for first plot}
+%         \label{fig:plot1}
+%     \end{subfigure}
+%     % \hfill
+%     \begin{subfigure}[b]{0.45\textwidth}
+%         \includegraphics[width=\linewidth]{Plot_2_section_personal_notes.png}
+%         % \caption{Caption for second plot}
+%         \label{fig:plot2}
+%     \end{subfigure}
+%     % \caption{Overall caption for the figure environment}
+%     \label{fig:overall_caption}
+% \end{figure}
+\section{Bot-Arm Interaction}
+Although the actual sytem for the bot is in 3 Dimensions (Revolute - Revolute - Revolute joints), it can be translated to 2d as a Revolute - Prismatic - Revolute joint. Now, we shall define what are the variables that we can control and further what variables describe the state.
+\subsection{Setting up of the problem:}
+Define the following for Bot A's state:
+\begin{itemize}
+    \item $\theta_B$ is the heading angle for the base of the robot
+    \item $x_B$ is the x coordinate for the centroid of the base of the robot
+    \item $y_B$ is the y coordinate for the centroid of the base of the robot
+    \item $\theta_1$ is the angle that the arm makes with the bot's base's heading
+    \item $l_1$ is the length of the arm of the bot (variable since 2d projection)
+    \item $\theta_2$ is the angle that the gripper makes with the arm
+\end{itemize}
+The control inputs for the bot A are:
+\begin{itemize}
+    \item $u_B$ is the x velocity for the centroid of the base of the robot
+    \item $v_B$ is the y velocity for the centroid of the base of the robot
+    \item $\omega_B$ is the angular velocity of the base of the robot
+    \item $\omega_1$ is the angular velocity of the arm wrt base
+    \item $\dot{l_1}$ is the kinematic rate of change for the length of the arm.
+    \item $\omega_2$ is the angular velocity of the gripper wrt arm
+\end{itemize}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\linewidth]{Bot_depiction.png}
+    \caption{A schematic of the bot-arm system}
+    \label{fig:placeholder}
+\end{figure}
+There also exists the following constraints on the system:
+\begin{itemize}
+    \item $l_0\leq l_1\leq l_{max}$
+    \item The orientation of the gripper wrt to the object must stay constant. Mathematically: $\omega_\text{object}=\omega_\text{gripper 1}= \omega_\text{gripper 2} $
+\end{itemize}
+\subsection{Forward Kinematics}
+\[
+x_G = x_B + l_1 \cos (\theta_B+ \theta_1)
+\]
+\[
+y_G = y_B + l_1 \sin (\theta_B + \theta_1)\] 
+\[
+\theta_G = \theta_B + \theta_1 + \theta_2
+\]
+\subsection{Inverse Kinematics}
+Currently, the knowns are the positions and orientations of the gripper in respect to a global coordinate system. Further, we wish to incorporate the velocities and $\omega$ of the gripper to plan the path for the object. 
+\[
+\Delta x = x_G - x_B \quad ; \quad \Delta y = y_G - y_B
+\]
+\[
+\theta_1 = \arctan2(\Delta y, \Delta x) - \theta_B (\text{Heading Angle})
+\]
+\[
+l_1 = \sqrt{(\Delta x) ^2 + (\Delta y)^2} 
+\]
+On resolving thse and calculating their derivatives, we can state the following:
+% \subsection{Jacobian and velocities}
+\begin{equation}
+\begin{bmatrix}
+\dot{x}_G \\
+\dot{y}_G \\
+\dot{\theta}_G
+\end{bmatrix}
+=
+\begin{bmatrix}
+    1 & 0 & \cos (\theta_1 + \theta_B) & -l\sin (\theta_1 + \theta_B)& -l\sin (\theta_1 + \theta_B) & 0\\
+    0 & 1 & \sin (\theta_1 +\theta_B) & l\cos (\theta_1 + \theta_B) & l\cos (\theta_1 +\theta_B) & 0 \\
+    0 & 0 & 0 & 1 & 1 & 1
+\end{bmatrix}
+\begin{bmatrix}
+\dot{x}_{B,1}\\
+\dot{y}_{B,1}\\
+\dot{l}_1 \\
+\dot{\theta}_1 \\
+\dot{\theta}_2 \\
+\dot{\theta}_{B,1}
+\end{bmatrix}
+\end{equation}
+% \[
+% J = \begin{bmatrix}
+%     1 & 0 & \cos (\theta_1 + \theta_B) & -l\sin (\theta_1 + \theta_B)& -l\sin (\theta_1 + \theta_B) & 0\\
+%     0 & 1 & \sin (\theta_1 +\theta_B) & l\cos (\theta_1 + \theta_B) & l\cos (\theta_1 +\theta_B) & 0 \\
+%     0 & 0 & 0 & 1 & 1 & 1
+% \end{bmatrix}
+% \]
+% \section{To do:}
+% \begin{enumerate}
+%     \item \vspace{-10pt}Solve the open loop optimal control problem. \hl{X}
+%     \item \vspace{-10pt} Assume, you have a reference trajectory, and solve the control inputs: u1, u2, v1, v2. Possibly try to reduce the control effects and see how the system behaves: The simplest way would be to make speeds= $v$ and both end effector arms now move with varying heading angles. Thus reducing the constraints from 4 to 2 ($\phi_1, \phi_2$) \hl{X}
+%     % \item \vspace{-10pt} Choose between Capella Sim/ Gazebo. (later)
+%     % \item \vspace{-10pt} Revolut-prismatic-revolut: Keep z constant currently: mathematical formulations 
+%     \item \vspace{-10pt} Create a reference trajectory (Trajectory vs path: Trajectory = path + speeds) and make it follow the path using MPC.
+%     \item \vspace{-10pt} {Personal Modifications in the equations:} Modify the equations for accounting for the angular velocities of end effectors.
+% \end{enumerate}
+\chapter{MPC Formulation}
+For the duration of the project, two approaches were tried. The following is the two different forms of formulations for the Model Predictive Control based controller for the bots:
+\section{Formulation 1}
+\subsection{Initial Conditions and other Knowns}
+We know the state at t=0: thus, we know X = [$x_B^1$, $y_B^1$, $q_1^1$, $q_2^1$,$q_3^1$, $x_B^2$, $y_B^2$, $q_1^2$, $q_2^2$,$q_3^2$ ] and the location of the center of mass of the object $(x_c, y_c)$
+\subsection{Formulation}
+\subsubsection*{Objective Function:}
+\begin{equation}
+    \min J(x) = J_1(x) + J_2(x) + J_3(x)
+\end{equation}
+Where,  $J_1(x)$ is the trajectory tracking cost.
+\begin{equation*}
+    J_1(x) = \sum _{k=i} ^ {i+N-1} \begin{bmatrix}
+        x_k - X_{\text{ref,k}} \\
+        y_k - Y_{\text{ref,k}}
+    \end{bmatrix}^T 
+    \begin{bmatrix}
+        P_x & 0 \\ 
+        0 & P_y
+    \end{bmatrix} \begin{bmatrix}
+        x_k - X_{\text{ref,k}} \\
+        y_k - Y_{\text{ref,k}}
+    \end{bmatrix}
+\end{equation*}
+$J_2$ is the effort minimisation cost.
+\begin{equation*}
+    J_2(x) =\sum_{j=1}^{10} \sum_ {k=i}^ {i+N-1} u_{j,k}^T R_{ca} u_{j,k}
+\end{equation*}
+$J_3$ is the inter robot collision avoidance cost.
+\begin{equation*}
+    J_3(x) = \sum_{k=0}^{N-1}\begin{bmatrix}
+        x_{\text{Bot1 base, k}} - x_{\text{Bot2 base, k}} \\
+        y_{\text{Bot1 base, k}} - y_{\text{Bot2 base, k}}
+    \end{bmatrix}^T * Q * \begin{bmatrix}
+        x_{\text{Bot1 base, k}} - x_{\text{Bot2 base, k}} \\
+        y_{\text{Bot1 base, k}} - y_{\text{Bot2 base, k}}
+    \end{bmatrix}
+\end{equation*}
+\subsubsection*{Constraints and Equations}
+\textbf{Control Constraint 1}\\
+Based on the Initial Conditions, we define the following constants:
+\[
+l_0 = \sqrt{(x_c - x_{g,1})^2 + (y_c - y_{g,1})^2}; \quad \theta_0 = \text{atan2} \bigg(\frac{y_{g,2} - y_{g,1}}{x_{g,2} - x_{g,1}} \bigg)- \text{atan2} \bigg(\frac{y_c - y_{g,1}}{x_c- x_{g,1}}\bigg)
+\]
+Where, $(x_{g,i}, y_{g,i})$ represents the (x,y) coordinates of the gripper for Bot i and $(x_c, y_c)$ represents the center of mass for the object. Using this, if the locations of grippers are known at any moment t, we can write the relation for coordinates of C (object's center of mass) as: 
+\begin{equation}
+    C_t \equiv \bigg\{x_{g,1} + l_0\cos\bigg(\text{atan2} \bigg(\frac{y_{g,2} - y_{g,1}}{x_{g,2} - x_{g,1}}\bigg) -\theta_0 \bigg), \quad y_{g,1} + l_0\sin\bigg(\text{atan2} \bigg(\frac{y_{g,2} - y_{g,1}}{x_{g,2} - x_{g,1}}\bigg) -\theta_0 \bigg)\bigg\} \bigg \vert_{t}
+\end{equation}
+\textbf{Control Constraint 2}\\
+Further define the system as: 
+\begin{equation}
+    X^i = 
+    \begin{bmatrix}
+        x_B\\
+        y_B\\
+        q_1\\
+        q_2\\
+        q_3
+    \end{bmatrix}^i
+    ; \ U^i = 
+    \begin{bmatrix}
+        u_{B,x}\\
+        u_{B,y}\\
+        \dot{q_1}\\
+        \dot{q_2}\\
+        \dot{q_3}
+    \end{bmatrix}^i \Longrightarrow \dot{X^i}=U^i
+\end{equation}
+\subsubsection*{Control Constraint 3}
+Distance between bots must be greater than some threshold.
+\begin{equation}
+    d(B_1, B_2) >= \text{d}
+\end{equation}
+(Also, note, it would be beneficial to have $d(B_1, B_2)$ to be as low as possible)
+\subsection{Results}
+The above formulation doesn't lead to any non trivial solutions as it runs into a lot of numerical issues due to the use of atan2 function. Thus, the work on this formulation had to be discontinued. 
+% \subsection*{Some more formulations}
+% Gripper Equations
+% \begin{equation*}
+%     x_g = x_B + q_2 \cos (q_1); \quad     y_g = y_B + q_2 \sin (q_1)
+% \end{equation*}
+
+% This formulation doesnt work very well since there's a lot of atan2 discontinuities that negatively affect the solver. Hence Alt formulation:
+\section{Formulation 2}
+\subsection{Initial Conditions and other Knowns}
+We know the state at t=0: thus, we know X = [$x_B^1$, $y_B^1$, $q_1^1$, $q_2^1$,$q_3^1$, $x_B^2$, $y_B^2$, $q_1^2$, $q_2^2$,$q_3^2$ ] and the location of the center of mass of the object $(x_c, y_c)$
+\subsection{Cost function}
+Define:\\
+\begin{equation}
+    \min J(x) = J_1(x) + J_2(x) + J_3(x)
+\end{equation}
+Where,  $J_1(x)$ is the trajectory tracking cost.
+\begin{equation*}
+    J_1(x) = \sum _{k=i} ^ {i+N-1} \begin{bmatrix}
+        x_k - X_{\text{ref,k}} \\
+        y_k - Y_{\text{ref,k}}
+    \end{bmatrix}^T 
+    \begin{bmatrix}
+        P_x & 0 \\ 
+        0 & P_y
+    \end{bmatrix} \begin{bmatrix}
+        x_k - X_{\text{ref,k}} \\
+        y_k - Y_{\text{ref,k}}
+    \end{bmatrix}
+\end{equation*}
+$J_2$ is the effort minimisation cost.
+\begin{equation*}
+    J_2(x) =\sum_{j=1}^{10} \sum_ {k=i}^ {i+N-1} u_{j,k}^T R_{ca} u_{j,k}
+\end{equation*}
+$J_3$ is the inter robot collision avoidance cost.
+\begin{equation*}
+    J_3(x) = \sum_{k=0}^{N-1}\begin{bmatrix}
+        x_{\text{Bot1 base, k}} - x_{\text{Bot2 base, k}} \\
+        y_{\text{Bot1 base, k}} - y_{\text{Bot2 base, k}}
+    \end{bmatrix}^T * Q * \begin{bmatrix}
+        x_{\text{Bot1 base, k}} - x_{\text{Bot2 base, k}} \\
+        y_{\text{Bot1 base, k}} - y_{\text{Bot2 base, k}}
+    \end{bmatrix}
+\end{equation*}
+and N is the horizon.
+\subsection{Formulation}
+\subsubsection*{Control Constraint 1}
+Instead of the previous formulation, we  now move on to solve the angles and translations through the solving for the $\cos(\theta), \sin(\theta), t_x, t_y$. Given initial points O, A, B, and final points A' and B';\\ 
+$A_{k+1}' = R_k . A_k + t_k;$\\
+$B_{k+1}' = R_k . B_k + t_k$;\\
+\\solving for
+\[
+R = \begin{bmatrix}
+        \cos \theta & \sin \theta\\
+        -\sin \theta & \cos \theta
+    \end{bmatrix}; \quad t = \begin{bmatrix}
+        t_x \\
+        t_y
+    \end{bmatrix}
+\]
+which yields the overall equations:
+\begin{equation}
+    \begin{bmatrix}
+        A_x & A_y & 1 & 0 \\
+        A_y & -A_x & 0 & 1 \\
+        B_x & B_y & 1 & 0 \\
+        B_y & -B_x & 0 & 1
+    \end{bmatrix}
+    \begin{bmatrix}
+        \cos \theta \\ \sin \theta \\ t_x \\ t_y
+    \end{bmatrix}
+    =
+    \begin{bmatrix}
+        A'_x \\[4pt] A'_y \\[4pt] B'_x \\[4pt] B'_y
+    \end{bmatrix}
+\end{equation}
+Solving for $\cos\theta, \sin\theta, t_x, t_y$ and using that to solve for O:\\
+O' = R . O + t
+\subsubsection*{Control Constraint 2}
+Now, we also have system as: 
+\begin{equation}
+    X^i = 
+    \begin{bmatrix}
+        x_B\\
+        y_B\\
+        q_1\\
+        q_2\\
+        q_3
+    \end{bmatrix}^i
+    ; \ U^i = 
+    \begin{bmatrix}
+        u_{B,x}\\
+        u_{B,y}\\
+        \dot{q_1}\\
+        \dot{q_2}\\
+        \dot{q_3}
+    \end{bmatrix}^i \Longrightarrow \dot{X^i}=U^i
+\end{equation}
+Further, compile multiple Bots into a single X vector:
+\[
+    X = \begin{bmatrix}
+        \text{Bot 1}_x\\
+        \text{Bot 2}_x\\
+        \vdots\\
+        \text{Bot N}_x
+    \end{bmatrix} ; U =\begin{bmatrix}
+        \text{Bot 1}_q\\
+        \text{Bot 2}_q\\
+        \vdots\\
+        \text{Bot N}_q
+    \end{bmatrix} \Longrightarrow \dot{X}=U
+\]
+\subsubsection*{Control Constraint 3}
+Distance between bots must be greater than some threshold.
+\begin{equation}
+    d(B_1, B_2) >= \text{d}
+\end{equation}
+(Also, note, it would be beneficial to have $d(B_1, B_2)$ to be as low as possible.)
+
+\subsection{Results}
+For: P = 20 $I_{10}$, Q = 10 $I_{10}$ (10 is the size of nu)
+\begin{figure}[H]
+    \centering
+
+    % Row 1
+    \begin{subfigure}{0.48\linewidth}
+        \centering
+        \fbox{\includegraphics[width=\linewidth]{Results_2d_MPC/MPC_simulation.png}}
+        \caption{MPC with R = 0}
+        \label{fig:sub1}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.48\linewidth}
+        \centering
+        \fbox{\includegraphics[width=\linewidth]{Results_2d_MPC/MPC_simulation_R_non_0.png}}
+        \caption{MPC with R = 0.1 $I_{10}$}
+        \label{fig:sub2}
+    \end{subfigure}
+
+    % \vspace{1em}
+
+    % Row 2
+    \begin{subfigure}{0.48\linewidth}
+        \centering
+        \fbox{\includegraphics[width=\linewidth]{Results_2d_MPC/Controls_with_R_0.png}}
+        \caption{Controls with R=0}
+        \label{fig:sub3}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.48\linewidth}
+        \centering
+        \fbox{\includegraphics[width=\linewidth]{Results_2d_MPC/Controls_with_R_non_0.png}}
+        \caption{Controls with R = 0.1 $ I_{10}$}
+        \label{fig:sub4}
+    \end{subfigure}
+
+    \caption{Results for trajectory tracking with varying R}
+    \label{fig:main}
+\end{figure}
+% \begin{figure}[H]
+%     \centering
+%     \includegraphics[width=0.5\linewidth]{image.png}
+%     \caption{Enter Caption}
+%     \label{fig:placeholder}
+% \end{figure}
+\chapter{Conclusion}
+
+This thesis presented the modelling and control of a multi-actuated cooperative manipulation system consisting of omnidirectional mobile robots equipped with planar R--P--R manipulators. A complete kinematic description of the bot--arm system and its interaction with a rigid object was developed in the 2D plane. Two Model Predictive Control (MPC) formulations were constructed to enable coordinated trajectory tracking of the object while respecting contact constraints and preventing inter-robot collisions.
+
+The first formulation, which directly incorporated object orientation through the \texttt{atan2} function, was found to be numerically unstable due to inherent discontinuities in angular representation. This motivated the development of a second formulation that instead employs a linear parametrization of orientation using $\cos\theta$ and $\sin\theta$, thereby eliminating discontinuities and significantly improving solver behaviour. Simulation results demonstrate that this formulation enables stable and accurate cooperative manipulation and that the choice of the control-effort penalty $R$ has a substantial effect on smoothness of control inputs and tracking stability.
+
+The results obtained in this work provide a strong foundation for extending cooperative manipulation to higher-dimensional tasks, larger robot teams, and more cluttered operational environments. Moreover, the formulation developed here lays the groundwork for transitioning from a centralized MPC-based architecture to decentralized reinforcement-learning-based control strategies envisioned for the next stage of the project.
+
+
+\chapter{Future Work}
+
+The future work planned for BTP-2 builds upon the modelling, MPC formulation, and simulation framework developed in this thesis. Several important extensions and improvements are required to further advance the system towards robust multi-robot cooperative manipulation.
+
+
+\section{3D Formulation}
+
+To extend the system from 2D planar manipulation to full 3D cooperative manipulation, it is essential to model rigid-body transformations in $\mathrm{SE}(3)$. A complete description of 3D object motion requires tracking the coordinates of at least three non-collinear points on the object. The object's orientation must be represented using the composition of rotations about the $x$, $y$, and $z$ axes, together with a 3D translation.
+
+\[
+A_{k+1}' = {R_z}_k\, {R_y}_k\, {R_x}_k\, A_k + T_k
+\]
+\[
+B_{k+1}' = {R_z}_k\, {R_y}_k\, {R_x}_k\, B_k + T_k
+\]
+\[
+C_{k+1}' = {R_z}_k\, {R_y}_k\, {R_x}_k\, C_k + T_k
+\]
+
+In expanded matrix form, this corresponds to:
+
+\[
+\begin{bmatrix}
+    A_x\\
+    A_y\\
+    A_z
+\end{bmatrix}_{k+1} = 
+\begin{bmatrix}
+    \cos \theta_z & -\sin \theta_z & 0 \\
+    \sin \theta_z & \cos \theta_z & 0 \\
+    0 & 0 & 1
+\end{bmatrix}_k 
+\begin{bmatrix}
+    \cos \theta_y & 0  & \sin \theta_y \\
+    0 & 1 & 0\\
+    -\sin \theta_y & 0 & \cos \theta_y
+\end{bmatrix}_k 
+\begin{bmatrix}
+    1 & 0 & 0 \\
+    0 & \cos \theta_x & -\sin \theta_x\\
+    0 & \sin \theta_x & \cos \theta_x
+\end{bmatrix}_k 
+\begin{bmatrix}
+    A_x\\
+    A_y\\
+    A_z
+\end{bmatrix}_k
++
+\begin{bmatrix}
+    T_x\\
+    T_y\\
+    T_z
+\end{bmatrix}_k
+\]
+
+Developing a complete 3D MPC framework requires incorporating these $\mathrm{SE}(3)$ transformations into the prediction model, enforcing multi-point contact constraints in 3D, and addressing the increased dimensionality and nonlinearities of the control problem. This extension represents a major next step toward general, real-world cooperative manipulation.
+
+
+\section{Issues in 2D}
+
+While the 2D MPC formulation developed in this thesis successfully demonstrates basic cooperative manipulation, several limitations remain that must be addressed in future work:
+
+\begin{enumerate}
+    \item \textbf{Robot Path Disparity and Path Crossing:}
+    There exists a disparity in how the MPC computes robot trajectories. Specifically, the two bots cross a single point at a certain instance during initialization, a behaviour that must be eliminated to ensure safe and realistic operation. This may require improved collision-avoidance constraints, better initialization strategies, or modifications to the MPC horizon and cost structure.
+
+    \item \textbf{Scaling to More Robots and Cluttered Environments:}
+    As the system is extended to a larger number of robots, the MPC must ensure coordinated motion without collision in increasingly cluttered or constrained spaces. This requires scalable constraint handling, improved obstacle-avoidance formulations, and potentially hierarchical or decentralized control structures to manage computational complexity.
+\end{enumerate}
+
+Additional considerations---including visualizing trajectories with start/end markers, incorporating collision checking between the bots and the object, and generating richer control plots---will further support debugging, interpretability, and real-world implementation.
+
+
+\section*{Move To Reinforcement Learning}
+
+The current system and protocols operate using a centralized MPC controller. As part of the next stage of the project, the goal is to transition toward a decentralized reinforcement-learning-based system. Approaches such as Q-learning, multi-agent deep reinforcement learning, or decentralized policy-gradient methods may be suitable candidates for this transition.
+
+To enable such a shift, it is crucial that the MPC-based physics system developed in this work remains robust, accurate, and fully validated. The MPC controller will serve as the ground truth for training or benchmarking RL controllers, and therefore must produce reliable behaviour across a wide range of trajectories and environments.
+
+The long-term aim is to develop a decentralized decision-making framework in which each robot learns its own policy while maintaining coordinated object manipulation, robustness to perturbations, and scalability to larger robot teams and 3D motion.
+
+\listoffigures
+\end{document} 
