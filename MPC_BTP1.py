@@ -374,8 +374,8 @@ for k in range(N):
     # # Distance between grippers and object must be equal to l1, l2
     # dist1_sq = (object_x[:, k] - (x[0, k] + x[3, k]*ca.cos(x[2, k])))**2 + (object_y[:, k] - (x[1, k] + x[3, k]*ca.sin(x[2, k])))**2
     # g.append(dist1_sq - l1**2)
-    dist2_sq = (object_x[:, k] - (x[5, k] + x[8, k]*ca.cos(x[7, k])))**2 + (object_y[:, k] - (x[6, k] + x[8, k]*ca.sin(x[7, k])))**2
-    g.append(dist2_sq - l2**2)
+    # dist2_sq = (object_x[:, k] - (x[5, k] + x[8, k]*ca.cos(x[7, k])))**2 + (object_y[:, k] - (x[6, k] + x[8, k]*ca.sin(x[7, k])))**2
+    # g.append(dist2_sq - l2**2)
     
 
 # Objective

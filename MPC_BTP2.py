@@ -9,7 +9,7 @@ import sys
 # -------------------------
 # Unit tests (transform & distance constraint)
 # -------------------------
-plot_count = 1
+plot_count = 0
 animation_count = 1
 def solve_transform_numpy(Ax_k, Ay_k, Bx_k, By_k, Ax_k1, Ay_k1, Bx_k1, By_k1, reg=0):
     """
@@ -30,130 +30,171 @@ def solve_transform_numpy(Ax_k, Ay_k, Bx_k, By_k, Ax_k1, Ay_k1, Bx_k1, By_k1, re
 
 def animate_robots(trajectory, trajectory_objx, trajectory_objy, x_ref, y_ref, dt, save_path="robot_animation.mp4"):
     """
-    Animate two robots as triangles with centroid and heading direction.
-    trajectory: (T, nx) array where columns are [x1, y1, q1_1, q2_1, q3_1, x2, y2, q1_2, q2_2, q3_2]
-    trajectory_objx, trajectory_objy: object center trajectory
-    x_ref, y_ref: reference trajectory
-    dt: time step
-    save_path: output video file
+    Animate two robots as triangles with centroid and heading direction, and draw a circle
+    centered at the object's COM whose radius equals the distance from COM to bot1 gripper.
+
+    Parameters
+    ----------
+    trajectory : (T, nx) array
+        Columns are [x1, y1, q1_1, q2_1, q3_1, x2, y2, q1_2, q2_2, q3_2]
+    trajectory_objx, trajectory_objy : (T,) arrays
+        object center trajectory
+    x_ref, y_ref : arrays
+        reference trajectory (plotted for context)
+    dt : float
+        time step (used for title/time display)
+    save_path : str
+        output video file path (mp4). Falls back to gif if ffmpeg unavailable.
     """
-    fig, ax = plt.subplots(figsize=(10, 8))
-    
+    import numpy as _np
+    import matplotlib.pyplot as _plt
+    import matplotlib.animation as _ani
+
+    fig, ax = _plt.subplots(figsize=(10, 8))
+
     # triangle size (half-width and height for visualization)
-    triangle_size = 0.25
-    
+    triangle_size = 0.2
+
     def get_triangle(cx, cy, heading, tri_size):
         # triangle points in local frame (before rotation)
-        local_pts = np.array([
-            [tri_size, 0],        # front corner (tip)
+        local_pts = _np.array([
+            [tri_size, 0],          # front corner (tip)
             [-tri_size, tri_size],  # back-left
             [-tri_size, -tri_size]  # back-right
         ])
         # rotation matrix
-        R = np.array([[np.cos(heading), -np.sin(heading)],
-                      [np.sin(heading), np.cos(heading)]])
+        R = _np.array([[_np.cos(heading), -_np.sin(heading)],
+                       [_np.sin(heading),  _np.cos(heading)]])
         # rotate and translate
-        rotated = R @ local_pts.T  
-        vertices = rotated.T + np.array([cx, cy])
+        rotated = R @ local_pts.T
+        vertices = rotated.T + _np.array([cx, cy])
         return vertices
-    
+
     def init_anim():
         ax.clear()
         return []
-    
+
     def animate(frame):
         ax.clear()
-        
+
+        # guard: frame index within available arrays
+        if frame < 0 or frame >= len(trajectory):
+            return []
+
         # extract positions from trajectory
-        x1, y1, q1_1, q2_1, q3_1 = trajectory[frame, 0], trajectory[frame, 1], trajectory[frame, 2], trajectory[frame, 3], trajectory[frame, 4]
-        x2, y2, q1_2, q2_2, q3_2 = trajectory[frame, 5], trajectory[frame, 6], trajectory[frame, 7], trajectory[frame, 8], trajectory[frame, 9]
-        
+        x1, y1, q1_1, q2_1, q3_1 = (trajectory[frame, 0], trajectory[frame, 1],
+                                    trajectory[frame, 2], trajectory[frame, 3], trajectory[frame, 4])
+        x2, y2, q1_2, q2_2, q3_2 = (trajectory[frame, 5], trajectory[frame, 6],
+                                    trajectory[frame, 7], trajectory[frame, 8], trajectory[frame, 9])
+
         # object position
         obj_x = trajectory_objx[frame]
         obj_y = trajectory_objy[frame]
-        
+
         # compute gripper positions
-        x1g = x1 + q2_1 * np.cos(q1_1)
-        y1g = y1 + q2_1 * np.sin(q1_1)
-        x2g = x2 + q2_2 * np.cos(q1_2)
-        y2g = y2 + q2_2 * np.sin(q1_2)
-        
-        # plot reference trajectory
-        ax.plot(x_ref[0:len(trajectory_objx)], y_ref[0:len(trajectory_objx)], 'r--', linewidth=2, label='Reference path')
-        
+        x1g = x1 + q2_1 * _np.cos(q1_1)
+        y1g = y1 + q2_1 * _np.sin(q1_1)
+        x2g = x2 + q2_2 * _np.cos(q1_2)
+        y2g = y2 + q2_2 * _np.sin(q1_2)
+
+        # compute radius = distance from object COM to bot1 gripper
+        radius = _np.hypot(x1g - obj_x, y1g - obj_y)
+
+        # plot reference trajectory (limit to length of object trajectory for safety)
+        ref_len = min(len(x_ref), len(trajectory_objx))
+        ax.plot(x_ref[0:ref_len], y_ref[0:ref_len], 'r--', linewidth=2, label='Reference path')
+
         # plot object trajectory up to current frame
         ax.plot(trajectory_objx[0:frame+1], trajectory_objy[0:frame+1], 'k-', linewidth=1.5, label='Object trajectory')
-        
+
         # plot bot1 trajectory up to current frame
         ax.plot(trajectory[0:frame+1, 0], trajectory[0:frame+1, 1], 'g-', linewidth=1, alpha=0.6, label='Bot1 trajectory')
-        
+
         # plot bot2 trajectory up to current frame
         ax.plot(trajectory[0:frame+1, 5], trajectory[0:frame+1, 6], 'b-', linewidth=1, alpha=0.6, label='Bot2 trajectory')
-        
+
         # draw bot1 as triangle with heading
         tri1 = get_triangle(x1, y1, q1_1, triangle_size)
-        tri1_patch = plt.Polygon(tri1, fill=True, edgecolor='green', facecolor='lightgreen', linewidth=2, alpha=0.7)
+        tri1_patch = _plt.Polygon(tri1, fill=True, edgecolor='green', facecolor='lightgreen',
+                                  linewidth=2, alpha=0.7, label='Bot1')
         ax.add_patch(tri1_patch)
-        
+
         # draw heading line for bot1 (from centroid to front corner)
         front1 = tri1[0]
         ax.plot([x1, front1[0]], [y1, front1[1]], 'g-', linewidth=2, label='Bot1 heading')
-        
+
         # draw line from bot1 centroid to gripper
         ax.plot([x1, x1g], [y1, y1g], 'g--', linewidth=3.5, alpha=0.8, label='Bot1 gripper arm')
-        
+
         # draw bot2 as triangle with heading
         tri2 = get_triangle(x2, y2, q1_2, triangle_size)
-        tri2_patch = plt.Polygon(tri2, fill=True, edgecolor='blue', facecolor='lightblue', linewidth=2, alpha=0.7)
+        tri2_patch = _plt.Polygon(tri2, fill=True, edgecolor='blue', facecolor='lightblue',
+                                  linewidth=2, alpha=0.7, label='Bot2')
         ax.add_patch(tri2_patch)
-        
+
         # draw heading line for bot2
         front2 = tri2[0]
         ax.plot([x2, front2[0]], [y2, front2[1]], 'b-', linewidth=2, label='Bot2 heading')
-        
+
         # draw line from bot2 centroid to gripper
         ax.plot([x2, x2g], [y2, y2g], 'b--', linewidth=3.5, alpha=0.8, label='Bot2 gripper arm')
-        
+
         # plot object center
-        ax.plot(obj_x, obj_y, 'ko', markersize=10, label='Object center')
-        
+        ax.plot(obj_x, obj_y, 'ko', markersize=8, label='Object center')
+
+        # draw circle around object (centered at COM, radius = distance to Bot1 gripper)
+        # ensure radius is finite and non-negative
+        if _np.isfinite(radius) and radius >= 0:
+            circle = _plt.Circle((obj_x, obj_y), radius,
+                                 fill=False, linestyle='--', linewidth=2, alpha=0.9,
+                                 edgecolor='orange', label='Object radius (to Bot1 gripper)')
+            ax.add_patch(circle)
+
         # gripper positions (markers)
         ax.plot(x1g, y1g, 'g^', markersize=6, label='Bot1 gripper')
         ax.plot(x2g, y2g, 'b^', markersize=6, label='Bot2 gripper')
-        
+
         # set axis properties
         ax.set_aspect('equal')
         ax.grid(True, alpha=0.3)
-        ax.legend(loc='upper left', fontsize=8)
+
+        # deduplicate legend entries (so label appears just once)
+        handles, labels = ax.get_legend_handles_labels()
+        by_label = {}
+        for h, lab in zip(handles, labels):
+            if lab not in by_label:
+                by_label[lab] = h
+        if len(by_label) > 0:
+            ax.legend(list(by_label.values()), list(by_label.keys()), loc='upper right', fontsize=3)
+
         ax.set_xlabel('X position')
         ax.set_ylabel('Y position')
         ax.set_title(f'Robot Animation - Step {frame} / {len(trajectory)-1} (time={frame*dt:.2f}s)')
-        
+
+        # return artists for blitting compatibility (we are not using blit here, but returning is harmless)
         return ax.patches + ax.lines
-    
+
     # create animation
-    anim = ani.FuncAnimation(fig, animate, init_func=init_anim, frames=len(trajectory), 
-                            interval=100, blit=False, repeat=True)
-    
-    # save animation
-    # save animation
+    anim = _ani.FuncAnimation(fig, animate, init_func=init_anim, frames=len(trajectory),
+                              interval=100, blit=False, repeat=True)
+
+    # save animation: try mp4 (ffmpeg), fallback to gif (pillow), else show
     gif_path = save_path.replace('.mp4', '.gif')
     try:
         anim.save(save_path, writer='ffmpeg', fps=10, dpi=100)
         print(f"✓ MP4 animation saved to {save_path}")
     except Exception as e:
-        print(f"⚠ ffmpeg not available: {e}")
+        print(f"⚠ ffmpeg not available or save failed: {e}")
         print(f"Saving as GIF instead to {gif_path}...")
         try:
-            # fallback to PIL (pillow) — supports .gif
             anim.save(gif_path, writer='pillow', fps=10)
             print(f"✓ GIF animation saved to {gif_path}")
         except Exception as e2:
             print(f"GIF save also failed: {e2}")
             print("Showing animation live instead...")
-            plt.show()
-    
-    plt.close()
+            _plt.show()
+
+    _plt.close(fig)
 
 def unit_test_transform():
     # ground-truth transform: rotation theta and translation tx,ty
@@ -251,7 +292,7 @@ l2 = math.sqrt((object_COM_x-x2g_original)**2 + (object_COM_y-y2g_original)**2)
 dt = 0.1
 N = 10              # MPC horizon
 print(f"N: {N}")
-T = 20          # total simulation steps
+T = 100          # total simulation steps
 
 nu = 10 # dimension of u per step (same as nx here)
 nx = 10 # dimension of state
@@ -334,7 +375,7 @@ for k in range(N):
         ca.horzcat(B_y[k], -B_x[k], zero, one)
     )
     bvec = ca.vertcat(A_x[k+1], A_y[k+1], B_x[k+1], B_y[k+1])
-    PARAM_T = ca.solve(M + 1e-9*ca.SX.eye(4), bvec)   # [a, b, tx, ty]
+    PARAM_T = ca.solve(M + 1e-10*ca.SX.eye(4), bvec)   # [a, b, tx, ty]
 
     a = PARAM_T[0]; b = PARAM_T[1]; tx = PARAM_T[2]; ty = PARAM_T[3]
 
@@ -372,10 +413,10 @@ for k in range(N):
     g.append(B_y[k] - (x[6, k] + x[8, k]*ca.sin(x[7, k])))
 
     # # Distance between grippers and object must be equal to l1, l2
-    dist1_sq = (object_x[:, k] - (x[0, k] + x[3, k]*ca.cos(x[2, k])))**2 + (object_y[:, k] - (x[1, k] + x[3, k]*ca.sin(x[2, k])))**2
-    g.append(dist1_sq - l1**2)
-    dist2_sq = (object_x[:, k] - (x[5, k] + x[8, k]*ca.cos(x[7, k])))**2 + (object_y[:, k] - (x[6, k] + x[8, k]*ca.sin(x[7, k])))**2
-    g.append(dist2_sq - l2**2)
+    # dist1_sq = (object_x[:, k] - (x[0, k] + x[3, k]*ca.cos(x[2, k])))**2 + (object_y[:, k] - (x[1, k] + x[3, k]*ca.sin(x[2, k])))**2
+    # g.append(dist1_sq - l1**2)
+    # dist2_sq = (object_x[:, k] - (x[5, k] + x[8, k]*ca.cos(x[7, k])))**2 + (object_y[:, k] - (x[6, k] + x[8, k]*ca.sin(x[7, k])))**2
+    # g.append(dist2_sq - l2**2)
     
 
 # Objective
@@ -411,7 +452,13 @@ nlp = {
     'p': ca.vertcat(x_original_vec, object_x_0, object_y_0, ref_param_x, ref_param_y)
 }
 
-opts = {'ipopt.print_level': 0, 'print_time': 0}
+opts = {
+    'ipopt.print_level': 0,      # Suppress IPOPT console output
+    'print_time': 0,             # Suppress CasADi timing output
+    # 'ipopt.hessian_approximation': 'limited-memory',  # Uncomment if you want L-BFGS
+    'ipopt.linear_solver': 'mumps'  # Use MUMPS linear solver
+}
+
 solver = ca.nlpsol('solver', 'ipopt', nlp, opts)
 
 # -------------------------
@@ -482,8 +529,8 @@ for k in range(N):
     lbg += [0.0]; ubg += [0.0]
 
     # # distance constraints for grippers to object
-    lbg += [0.0]; ubg += [0.0]
-    lbg += [0.0]; ubg += [0.0]
+    # lbg += [0.0]; ubg += [0.0]
+    # lbg += [0.0]; ubg += [0.0]
 
 # check lengths
 assert len(lbg) == g_vec.shape[0], f"lbg len {len(lbg)} != g size {g_vec.shape[0]}"
@@ -689,10 +736,10 @@ if (animation_count==1):
     print("Generating animation...")
     animate_robots(trajectory, trajectory_objx, trajectory_objy, x_ref, y_ref, dt, save_path="robot_animation.mp4")
 
-for i in range(len(trajectory_objx)):
-    # print distance between grippers and object
-    dist = np.sqrt((trajectory_objx[i] - trajectory[i, 0])**2 + (trajectory_objy[i] - trajectory[i, 1])**2)
-    # print distance between the two bots
-    dist_bots = np.sqrt((trajectory[i, 0] - trajectory[i, 5])**2 + (trajectory[i, 1] - trajectory[i, 6])**2)
-    print(f"Step {i}: distance between the bots: {dist_bots:.4f}")
+# for i in range(len(trajectory_objx)):
+#     # print distance between grippers and object
+#     dist = np.sqrt((trajectory_objx[i] - trajectory[i, 0])**2 + (trajectory_objy[i] - trajectory[i, 1])**2)
+#     # print distance between the two bots
+#     dist_bots = np.sqrt((trajectory[i, 0] - trajectory[i, 5])**2 + (trajectory[i, 1] - trajectory[i, 6])**2)
+#     print(f"Step {i}: distance between the bots: {dist_bots:.4f}")
 
