@@ -28,47 +28,17 @@ def solve_transform_numpy(Ax_k, Ay_k, Bx_k, By_k, Ax_k1, Ay_k1, Bx_k1, By_k1, re
     sol = np.linalg.solve(M_reg, b)
     return sol  # [a, b, tx, ty]
 
-def animate_robots(trajectory, trajectory_objx, trajectory_objy, x_ref, y_ref, dt, save_path="robot_animation.mp4"):
+def animate_robots(trajectory, trajectory_objx, trajectory_objy,
+                   x_ref, y_ref, dt, save_path="robot_animation.mp4"):
     """
-    Animate two robots as triangles with centroid and heading direction, and draw a circle
+    Animate two robots as shaded circles with heading direction, and draw a circle
     centered at the object's COM whose radius equals the distance from COM to bot1 gripper.
-
-    Parameters
-    ----------
-    trajectory : (T, nx) array
-        Columns are [x1, y1, q1_1, q2_1, q3_1, x2, y2, q1_2, q2_2, q3_2]
-    trajectory_objx, trajectory_objy : (T,) arrays
-        object center trajectory
-    x_ref, y_ref : arrays
-        reference trajectory (plotted for context)
-    dt : float
-        time step (used for title/time display)
-    save_path : str
-        output video file path (mp4). Falls back to gif if ffmpeg unavailable.
     """
-    import numpy as _np
-    import matplotlib.pyplot as _plt
-    import matplotlib.animation as _ani
 
-    fig, ax = _plt.subplots(figsize=(10, 8))
+    fig, ax = plt.subplots(figsize=(10, 8))
 
-    # triangle size (half-width and height for visualization)
-    triangle_size = 0.2
-
-    def get_triangle(cx, cy, heading, tri_size):
-        # triangle points in local frame (before rotation)
-        local_pts = _np.array([
-            [tri_size, 0],          # front corner (tip)
-            [-tri_size, tri_size],  # back-left
-            [-tri_size, -tri_size]  # back-right
-        ])
-        # rotation matrix
-        R = _np.array([[_np.cos(heading), -_np.sin(heading)],
-                       [_np.sin(heading),  _np.cos(heading)]])
-        # rotate and translate
-        rotated = R @ local_pts.T
-        vertices = rotated.T + _np.array([cx, cy])
-        return vertices
+    # visualization parameters
+    robot_radius = 0.18
 
     def init_anim():
         ax.clear()
@@ -77,124 +47,142 @@ def animate_robots(trajectory, trajectory_objx, trajectory_objy, x_ref, y_ref, d
     def animate(frame):
         ax.clear()
 
-        # guard: frame index within available arrays
         if frame < 0 or frame >= len(trajectory):
             return []
 
-        # extract positions from trajectory
-        x1, y1, q1_1, q2_1, q3_1 = (trajectory[frame, 0], trajectory[frame, 1],
-                                    trajectory[frame, 2], trajectory[frame, 3], trajectory[frame, 4])
-        x2, y2, q1_2, q2_2, q3_2 = (trajectory[frame, 5], trajectory[frame, 6],
-                                    trajectory[frame, 7], trajectory[frame, 8], trajectory[frame, 9])
+        # --- extract robot states ---
+        x1, y1, q1_1, q2_1, _ = trajectory[frame, 0:5]
+        x2, y2, q1_2, q2_2, _ = trajectory[frame, 5:10]
 
-        # object position
+        # --- object position ---
         obj_x = trajectory_objx[frame]
         obj_y = trajectory_objy[frame]
 
-        # compute gripper positions
-        x1g = x1 + q2_1 * _np.cos(q1_1)
-        y1g = y1 + q2_1 * _np.sin(q1_1)
-        x2g = x2 + q2_2 * _np.cos(q1_2)
-        y2g = y2 + q2_2 * _np.sin(q1_2)
+        # --- gripper positions ---
+        x1g = x1 + q2_1 * np.cos(q1_1)
+        y1g = y1 + q2_1 * np.sin(q1_1)
+        x2g = x2 + q2_2 * np.cos(q1_2)
+        y2g = y2 + q2_2 * np.sin(q1_2)
 
-        # compute radius = distance from object COM to bot1 gripper
-        radius = _np.hypot(x1g - obj_x, y1g - obj_y)
+        # radius = distance from object COM to bot1 gripper
+        radius = np.hypot(x1g - obj_x, y1g - obj_y)
 
-        # plot reference trajectory (limit to length of object trajectory for safety)
+        # --- reference path ---
         ref_len = min(len(x_ref), len(trajectory_objx))
-        ax.plot(x_ref[0:ref_len], y_ref[0:ref_len], 'r--', linewidth=2, label='Reference path')
+        ax.plot(x_ref[:ref_len], y_ref[:ref_len],
+                'r--', linewidth=2, label='Reference path')
 
-        # plot object trajectory up to current frame
-        ax.plot(trajectory_objx[0:frame+1], trajectory_objy[0:frame+1], 'k-', linewidth=1.5, label='Object trajectory')
+        # --- trajectories ---
+        ax.plot(trajectory_objx[:frame+1], trajectory_objy[:frame+1],
+                'k-', linewidth=1.5, label='Object trajectory')
+        ax.plot(trajectory[:frame+1, 0], trajectory[:frame+1, 1],
+                'g-', linewidth=1, alpha=0.6, label='Bot1 trajectory')
+        ax.plot(trajectory[:frame+1, 5], trajectory[:frame+1, 6],
+                'b-', linewidth=1, alpha=0.6, label='Bot2 trajectory')
 
-        # plot bot1 trajectory up to current frame
-        ax.plot(trajectory[0:frame+1, 0], trajectory[0:frame+1, 1], 'g-', linewidth=1, alpha=0.6, label='Bot1 trajectory')
+        # ================= BOT 1 =================
+        bot1_circle = plt.Circle(
+            (x1, y1),
+            robot_radius,
+            facecolor='lightgreen',
+            edgecolor='green',
+            linewidth=2,
+            alpha=0.7,
+            label='Bot1'
+        )
+        ax.add_patch(bot1_circle)
 
-        # plot bot2 trajectory up to current frame
-        ax.plot(trajectory[0:frame+1, 5], trajectory[0:frame+1, 6], 'b-', linewidth=1, alpha=0.6, label='Bot2 trajectory')
+        # heading line
+        hx1 = x1 + robot_radius * np.cos(q1_1)
+        hy1 = y1 + robot_radius * np.sin(q1_1)
+        ax.plot([x1, hx1], [y1, hy1],
+                'g-', linewidth=2, label='Bot1 heading')
 
-        # draw bot1 as triangle with heading
-        tri1 = get_triangle(x1, y1, q1_1, triangle_size)
-        tri1_patch = _plt.Polygon(tri1, fill=True, edgecolor='green', facecolor='lightgreen',
-                                  linewidth=2, alpha=0.7, label='Bot1')
-        ax.add_patch(tri1_patch)
+        # gripper arm
+        ax.plot([x1, x1g], [y1, y1g],
+                'g--', linewidth=3.5, alpha=0.8, label='Bot1 gripper arm')
 
-        # draw heading line for bot1 (from centroid to front corner)
-        front1 = tri1[0]
-        ax.plot([x1, front1[0]], [y1, front1[1]], 'g-', linewidth=2, label='Bot1 heading')
+        # ================= BOT 2 =================
+        bot2_circle = plt.Circle(
+            (x2, y2),
+            robot_radius,
+            facecolor='lightblue',
+            edgecolor='blue',
+            linewidth=2,
+            alpha=0.7,
+            label='Bot2'
+        )
+        ax.add_patch(bot2_circle)
 
-        # draw line from bot1 centroid to gripper
-        ax.plot([x1, x1g], [y1, y1g], 'g--', linewidth=3.5, alpha=0.8, label='Bot1 gripper arm')
+        # heading line
+        hx2 = x2 + robot_radius * np.cos(q1_2)
+        hy2 = y2 + robot_radius * np.sin(q1_2)
+        ax.plot([x2, hx2], [y2, hy2],
+                'b-', linewidth=2, label='Bot2 heading')
 
-        # draw bot2 as triangle with heading
-        tri2 = get_triangle(x2, y2, q1_2, triangle_size)
-        tri2_patch = _plt.Polygon(tri2, fill=True, edgecolor='blue', facecolor='lightblue',
-                                  linewidth=2, alpha=0.7, label='Bot2')
-        ax.add_patch(tri2_patch)
+        # gripper arm
+        ax.plot([x2, x2g], [y2, y2g],
+                'b--', linewidth=3.5, alpha=0.8, label='Bot2 gripper arm')
 
-        # draw heading line for bot2
-        front2 = tri2[0]
-        ax.plot([x2, front2[0]], [y2, front2[1]], 'b-', linewidth=2, label='Bot2 heading')
-
-        # draw line from bot2 centroid to gripper
-        ax.plot([x2, x2g], [y2, y2g], 'b--', linewidth=3.5, alpha=0.8, label='Bot2 gripper arm')
-
-        # plot object center
+        # --- object center ---
         ax.plot(obj_x, obj_y, 'ko', markersize=8, label='Object center')
 
-        # draw circle around object (centered at COM, radius = distance to Bot1 gripper)
-        # ensure radius is finite and non-negative
-        if _np.isfinite(radius) and radius >= 0:
-            circle = _plt.Circle((obj_x, obj_y), radius,
-                                 fill=False, linestyle='--', linewidth=2, alpha=0.9,
-                                 edgecolor='orange', label='Object radius (to Bot1 gripper)')
+        # --- object radius circle ---
+        if np.isfinite(radius) and radius >= 0:
+            circle = plt.Circle(
+                (obj_x, obj_y),
+                radius,
+                fill=False,
+                linestyle='--',
+                linewidth=2,
+                alpha=0.9,
+                edgecolor='orange',
+                label='Object radius (to Bot1 gripper)'
+            )
             ax.add_patch(circle)
 
-        # gripper positions (markers)
+        # --- gripper markers ---
         ax.plot(x1g, y1g, 'g^', markersize=6, label='Bot1 gripper')
         ax.plot(x2g, y2g, 'b^', markersize=6, label='Bot2 gripper')
 
-        # set axis properties
+        # --- axes ---
         ax.set_aspect('equal')
         ax.grid(True, alpha=0.3)
-
-        # deduplicate legend entries (so label appears just once)
-        handles, labels = ax.get_legend_handles_labels()
-        by_label = {}
-        for h, lab in zip(handles, labels):
-            if lab not in by_label:
-                by_label[lab] = h
-        if len(by_label) > 0:
-            ax.legend(list(by_label.values()), list(by_label.keys()), loc='upper right', fontsize=3)
-
         ax.set_xlabel('X position')
         ax.set_ylabel('Y position')
-        ax.set_title(f'Robot Animation - Step {frame} / {len(trajectory)-1} (time={frame*dt:.2f}s)')
+        ax.set_title(
+            f'Robot Animation - Step {frame} / {len(trajectory)-1} '
+            f'(time={frame*dt:.2f}s)'
+        )
 
-        # return artists for blitting compatibility (we are not using blit here, but returning is harmless)
+        # deduplicate legend
+        handles, labels = ax.get_legend_handles_labels()
+        unique = dict(zip(labels, handles))
+        ax.legend(unique.values(), unique.keys(),
+                  loc='upper right', fontsize=6)
+
         return ax.patches + ax.lines
 
-    # create animation
-    anim = _ani.FuncAnimation(fig, animate, init_func=init_anim, frames=len(trajectory),
-                              interval=100, blit=False, repeat=True)
+    anim = ani.FuncAnimation(
+        fig, animate, init_func=init_anim,
+        frames=len(trajectory), interval=100,
+        blit=False, repeat=True
+    )
 
-    # save animation: try mp4 (ffmpeg), fallback to gif (pillow), else show
     gif_path = save_path.replace('.mp4', '.gif')
     try:
         anim.save(save_path, writer='ffmpeg', fps=10, dpi=100)
         print(f"✓ MP4 animation saved to {save_path}")
     except Exception as e:
-        print(f"⚠ ffmpeg not available or save failed: {e}")
-        print(f"Saving as GIF instead to {gif_path}...")
+        print(f"ffmpeg failed: {e}")
         try:
             anim.save(gif_path, writer='pillow', fps=10)
             print(f"✓ GIF animation saved to {gif_path}")
-        except Exception as e2:
-            print(f"GIF save also failed: {e2}")
-            print("Showing animation live instead...")
-            _plt.show()
+        except Exception:
+            print("Showing animation live...")
+            plt.show()
 
-    _plt.close(fig)
+    plt.close(fig)
 
 def unit_test_transform():
     # ground-truth transform: rotation theta and translation tx,ty
@@ -288,6 +276,9 @@ l = math.sqrt((xc-x1g_original)**2 + (yc-y1g_original)**2)
 theta_const = math.atan2(y2g_original-y1g_original, x2g_original-x1g_original) - math.atan2(yc-y1g_original, xc-x1g_original)
 l1 = math.sqrt((object_COM_x-x1g_original)**2 + (object_COM_y-y1g_original)**2)
 l2 = math.sqrt((object_COM_x-x2g_original)**2 + (object_COM_y-y2g_original)**2)
+l3 = math.sqrt((x2g_original-x1g_original)**2 + (y2g_original-y1g_original)**2)
+vectored_area= 0.5*(x1g_original*y2g_original - x2g_original*y1g_original + x2g_original*object_COM_y - object_COM_x*y2g_original + object_COM_x*y1g_original - x1g_original*object_COM_y)
+
 # Hyperparameters
 dt = 0.1
 N = 10              # MPC horizon
@@ -304,7 +295,7 @@ x_ref = np.linspace(0, T*dt, T+1)          # example x reference (unused beyond 
 y_ref =2*np.cos(x_ref)
 # y_ref =4*np.sin(t_grid)                     # example y reference
 
-P = np.array([[20.0, 0.0],[0.0, 20.0]])
+P = np.array([[2.0, 0.0],[0.0, 2.0]])
 Q = 10.0
 # R = 0.1 * np.eye(nu)
 # R = np.array([u1, u2, u3, u4, u5, u6, u7, u8, u9, u10])
@@ -367,68 +358,47 @@ for k in range(N):
     x_next = x[:, k] + B @ u[:, k]
     g.append(x[:, k+1] - x_next)  # vector length nx
 
-    # 2) compute transform from gripper positions at k -> k+1
-    M = ca.vertcat(
-        ca.horzcat(A_x[k],  A_y[k], one, zero),
-        ca.horzcat(A_y[k], -A_x[k], zero, one),
-        ca.horzcat(B_x[k],  B_y[k], one, zero),
-        ca.horzcat(B_y[k], -B_x[k], zero, one)
-    )
-    bvec = ca.vertcat(A_x[k+1], A_y[k+1], B_x[k+1], B_y[k+1])
-    PARAM_T = ca.solve(M + 1e-10*ca.SX.eye(4), bvec)   # [a, b, tx, ty]
-
-    a = PARAM_T[0]; b = PARAM_T[1]; tx = PARAM_T[2]; ty = PARAM_T[3]
-
-    # object at time k (symbolic expression)
-    obj_x_k = obj_next_x_list[k]
-    obj_y_k = obj_next_y_list[k]
-
-    # Standard rotation matrix representation (a=cosθ, b=sinθ)
-    ### ERROR
-    # p_{k+1} = R p_k + t  where R = [[a, b],[-b, a]]
-    obj_x_k1 = a*obj_x_k + b*obj_y_k + tx
-    obj_y_k1 = -b*obj_x_k + a*obj_y_k + ty
-
-    # append computed symbolic next
-    obj_next_x_list.append(ca.reshape(obj_x_k1, 1, 1))
-    obj_next_y_list.append(ca.reshape(obj_y_k1, 1, 1))
-
-    # enforce equality with declared decision variables object_x, object_y
-    g.append(object_x[:, k+1] - obj_next_x_list[k+1])
-    g.append(object_y[:, k+1] - obj_next_y_list[k+1])
-
     # 3) distance constraint: dist_sq - d^2 >= 0  
     dist_sq = (x[0, k] - x[5, k])**2 + (x[1, k] - x[6, k])**2
     g.append(dist_sq - d**2)
 
-    # 4) enforce q3_1 and q3_2 to zero at each step (as constraints)
-    g.append(x[4, k+1])   # q3_1 == 0
-    g.append(x[9, k+1])   # q3_2 == 0
-
-    # A_X, A_Y, B_X, B_Y updated automatically in loop
-    # pack object_next lists into vertcat expressions
-    g.append(A_x[k] - (x[0, k] + x[3, k]*ca.cos(x[2, k])))
-    g.append(A_y[k] - (x[1, k] + x[3, k]*ca.sin(x[2, k])))
-    g.append(B_x[k] - (x[5, k] + x[8, k]*ca.cos(x[7, k])))
-    g.append(B_y[k] - (x[6, k] + x[8, k]*ca.sin(x[7, k])))
+    # # 4) enforce q3_1 and q3_2 to zero at each step (as constraints)
+    # g.append(x[4, k+1])   # q3_1 == 0
+    # g.append(x[9, k+1])   # q3_2 == 0
 
     # # Distance between grippers and object must be equal to l1, l2
-    # dist1_sq = (object_x[:, k] - (x[0, k] + x[3, k]*ca.cos(x[2, k])))**2 + (object_y[:, k] - (x[1, k] + x[3, k]*ca.sin(x[2, k])))**2
-    # g.append(dist1_sq - l1**2)
-    # dist2_sq = (object_x[:, k] - (x[5, k] + x[8, k]*ca.cos(x[7, k])))**2 + (object_y[:, k] - (x[6, k] + x[8, k]*ca.sin(x[7, k])))**2
-    # g.append(dist2_sq - l2**2)
-    
+    dist1_sq = (object_x[:, k] - (x[0, k] + x[3, k]*ca.cos(x[2, k])))**2 + (object_y[:, k] - (x[1, k] + x[3, k]*ca.sin(x[2, k])))**2
+    g.append(dist1_sq - l1**2)
+
+    dist1_sq = (object_x[:, k+1] - (x[0, k+1] + x[3, k+1]*ca.cos(x[2, k+1])))**2 + (object_y[:, k+1] - (x[1, k+1] + x[3, k+1]*ca.sin(x[2, k+1])))**2
+    g.append(dist1_sq - l1**2)
+
+    dist2_sq = (object_x[:, k] - (x[5, k] + x[8, k]*ca.cos(x[7, k])))**2 + (object_y[:, k] - (x[6, k] + x[8, k]*ca.sin(x[7, k])))**2
+    g.append(dist2_sq - l2**2)
+
+    dist3_sq = ((x[5, k] + x[8, k]*ca.cos(x[7, k])) - (x[0, k] + x[3, k]*ca.cos(x[2, k])))**2 + ((x[6, k] + x[8, k]*ca.sin(x[7, k])) - (x[1, k] + x[3, k]*ca.sin(x[2, k])))**2
+    g.append(dist3_sq - l3**2)    
+
 
 # Objective
 cost = 0
 for k in range(N):
     err = ca.vertcat(object_x[0, k] - ref_x_param[0, k],
                      object_y[0, k] - ref_y_param[0, k])
-    cost += ca.mtimes([err.T, P, err])
+    cost += ca.mtimes([err.T, 10*P, err])
     cost += ca.mtimes([u[:, k].T, R_ca, u[:, k]])
     dist_err = ca.vertcat((x[0, k]-x[5, k]), (x[1, k]-x[6, k]))
     cost += ca.mtimes([dist_err.T, Q * ca.DM.eye(2), dist_err])
 
+    # minimise sharp changes in control (u[k+1]-u[k])^2
+    # if k < N-1:
+    #     delta_u = u[:, k+1] - u[:, k]
+    #     cost += ca.mtimes([delta_u.T, 0.25*R_ca, delta_u])
+
+# terminal cost
+# err_terminal = ca.vertcat(object_x[0, N] - ref_x_param[0, N],
+#                             object_y[0, N] - ref_y_param[0, N])
+# cost += ca.mtimes([err_terminal.T, P, err_terminal])
 
 # Decision variables vector
 dec_vars = ca.vertcat(
@@ -453,10 +423,13 @@ nlp = {
 }
 
 opts = {
-    'ipopt.print_level': 0,      # Suppress IPOPT console output
-    'print_time': 0,             # Suppress CasADi timing output
-    # 'ipopt.hessian_approximation': 'limited-memory',  # Uncomment if you want L-BFGS
-    'ipopt.linear_solver': 'mumps'  # Use MUMPS linear solver
+    'ipopt.print_level': 0,
+    'ipopt.warm_start_init_point': 'yes',
+    'ipopt.max_iter': 3000,  # Increased for longer horizon
+    'ipopt.tol': 1e-4,
+    'ipopt.acceptable_tol': 1e-3,
+    'ipopt.acceptable_iter': 20,  # Increased
+    'print_time': 0
 }
 
 solver = ca.nlpsol('solver', 'ipopt', nlp, opts)
@@ -512,25 +485,22 @@ for k in range(N):
     ubg += [0.0]*nx
 
     # object equalities
-    lbg += [0.0]; ubg += [0.0]
-    lbg += [0.0]; ubg += [0.0]
+    # lbg += [0.0]; ubg += [0.0]
+    # lbg += [0.0]; ubg += [0.0]
 
     # distance residual: dist_sq - d^2 >= 0  -> lower bound 0
     lbg += [0.0]
     ubg += [1e6]  # big upper bound
 
     # q3 == 0
-    lbg += [0.0]; ubg += [0.0]
-    lbg += [0.0]; ubg += [0.0]
-
-    lbg += [0.0]; ubg += [0.0]
-    lbg += [0.0]; ubg += [0.0]
-    lbg += [0.0]; ubg += [0.0]
-    lbg += [0.0]; ubg += [0.0]
+    # lbg += [0.0]; ubg += [0.0]
+    # lbg += [0.0]; ubg += [0.0]
 
     # # distance constraints for grippers to object
-    # lbg += [0.0]; ubg += [0.0]
-    # lbg += [0.0]; ubg += [0.0]
+    lbg += [0.0]; ubg += [1e-10]
+    lbg += [0.0]; ubg += [1e-10]
+    lbg += [0.0]; ubg += [1e-10]
+    lbg += [0.0]; ubg += [1e-10]
 
 # check lengths
 assert len(lbg) == g_vec.shape[0], f"lbg len {len(lbg)} != g size {g_vec.shape[0]}"
@@ -556,17 +526,13 @@ nx_block = nx * (N+1)
 nu_block = nu * N
 obj_block = (N+1)
 total_dec_vars = nx_block + nu_block + obj_block + obj_block
-
-# sanity check
-assert total_dec_vars == (nx*(N+1) + nu*N + 2*(N+1))
-
+init_guess = np.zeros(total_dec_vars)
 for t in range(T - N):
     # prepare reference horizon
     ref_horizon_x = x_ref[t:t+N+1]
     ref_horizon_y = y_ref[t:t+N+1]
 
     # initial guess (warm start) - zero or previous warmstart (simple zero here)
-    init_guess = np.zeros(total_dec_vars)
 
     # pack parameters vector p
     # x_original is expected as column vector of length nx in param order
@@ -583,7 +549,10 @@ for t in range(T - N):
         break
 
     sol_x = sol['x'].full().flatten()
-    print(sol_x)
+    cost_value = float(sol['f'])
+    print(f"Optimal cost = {cost_value:.6f}")
+    # print(len(sol_x))
+    # print(sol_x)
     init_guess = sol_x.copy()
     # extract blocks by named indices
     idx_x = 0
@@ -601,8 +570,8 @@ for t in range(T - N):
     objx_horizon = sol_x[idx_objx : idx_objx + obj_block]
     objy_horizon = sol_x[idx_objy : idx_objy + obj_block]
 
-    object_x_current = np.array([objx_horizon[1]])
-    object_y_current = np.array([objy_horizon[1]])
+    object_x_current = np.array([objx_horizon[2]])
+    object_y_current = np.array([objy_horizon[2]])
 
     # store
     trajectory.append(x_current.copy())
@@ -610,7 +579,7 @@ for t in range(T - N):
     trajectory_objy.append(object_y_current[0])
     controls.append(u_opt.copy())
 
-    print(f"step {t}: first-control u[0]={u_opt[0]:.4f}, objx={object_x_current[0]:.4f}, objy={object_y_current[0]:.4f}")
+    # print(f"step {t}: first-control u[0]={u_opt[0]:.4f}, objx={object_x_current[0]:.4f}, objy={object_y_current[0]:.4f}")
 
 # convert to arrays for plotting
 trajectory = np.array(trajectory)           
@@ -742,4 +711,4 @@ if (animation_count==1):
 #     # print distance between the two bots
 #     dist_bots = np.sqrt((trajectory[i, 0] - trajectory[i, 5])**2 + (trajectory[i, 1] - trajectory[i, 6])**2)
 #     print(f"Step {i}: distance between the bots: {dist_bots:.4f}")
-
+print(vectored_area)

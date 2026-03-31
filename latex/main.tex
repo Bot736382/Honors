@@ -6,7 +6,8 @@
 % Geometry (Margins)
 \usepackage[top=2cm, bottom=2.5cm, left=2cm, right=2cm]{geometry}
 \geometry{verbose}
-
+% Enable tree diagrams
+\usepackage[edges]{forest}
 % Math Packages
 \usepackage{amsmath, amstext, amsfonts}
 
@@ -33,6 +34,22 @@
 
 % TikZ for Diagrams
 \usepackage{tikz}   
+\usetikzlibrary{arrows.meta,positioning,calc}
+
+% Forest defaults for clean trees
+\forestset{
+    rl tree/.style={
+        for tree={
+            draw,
+            rounded corners,
+            align=center,
+            inner sep=3pt,
+            s sep=7mm,
+            l sep=8mm,
+            edge={-Stealth}
+        }
+    }
+}
 
 % Symbols
 \usepackage{wasysym}    
@@ -627,5 +644,80 @@ To enable such a shift, it is crucial that the MPC-based physics system develope
 
 The long-term aim is to develop a decentralized decision-making framework in which each robot learns its own policy while maintaining coordinated object manipulation, robustness to perturbations, and scalability to larger robot teams and 3D motion.
 
+\chapter{BTP2 and onwards}
+\chapter{Rigidity Analysis}
+Currently using: 2n-3 points for 2d rigidity.\\
+Issue:\\
+This \href{https://arxiv.org/pdf/1707.03633}{paper's} section 1 indicates the issue with the 2n-3 points for 2d rigidity. \\
+Proposal:\\
+Triangulation of points on an object can lead to a more robust rigidity analysis. To do this more effectively, there are multiple techniques to do so. I suggest using the center of mass as the origin of all triangles.
+% \section{Delaunay Triangulation}
+\chapter{Currently Existing Theories}
+\chapter{Reinforcement Learning Policies}
+Reinforcement Learning Policies can be classified into the following categories:
+\begin{itemize}
+    \item Value-Based Methods
+    \item Policy-Based Methods
+    \item Hybrid Approaches
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \resizebox{\linewidth}{!}{%
+      \begin{forest}
+          rl tree
+          [Reinforcement\\Learning Policies
+              [Value-Based
+                  [Q-Learning]
+                  [SARSA]
+                  [DQN]
+              ]
+              [Policy-Based
+                  [REINFORCE]
+                  [Actor--Critic]
+                  [PPO]
+              ]
+              [Hybrid
+                  [A2C/A3C]
+                  [DDPG]
+                  [SAC]
+              ]
+          ]
+      \end{forest}%
+    }
+    \caption{Taxonomy of reinforcement learning policy methods}
+    \label{fig:rl-policy-tree}
+\end{figure}
+Where, 
+SARSA: State-Action-Reward-State-Action\\
+DQN: Deep Q-Network\\
+REINFORCE: REward Increment = Nonnegative Factor x Offset Reinforcement x Characteristic
+PPO: Proximal Policy Optimization\\
+A2C/A3C: Advantage Actor-Critic / Asynchronous Advantage Actor-Critic\\
+DDPG: Deep Deterministic Policy Gradient\\
+SAC: Soft Actor-Critic\\
+In Bertsekas book: \textbf{Value Iterations} Lookahead and ROllout.
+ 
+
+\section{Proposal}
+For designing the MARL, we can consier using either Policy-Based methods or Hybrid Approaches. Currently, I am considering Actor-Critic Methods since it deals with both a Temporal Difference error and a policy gradient. (Still working on this)\\
+\\ 
+Why is this important?\\
+In our case, since we have a continuous action space, using Value-Based methods would be difficult since it would require discretization of the action space which would lead to loss of information and also lead to a combinatorial explosion of the action space. Hence, we can consider using either Policy-Based methods or Hybrid Approaches.\\
+\\
+A very interesting proposition that can be explored is the use of Graph Neural Networks (GNNs) for multi-agent reinforcement learning in cooperative manipulation tasks. The GNN will help model the states in the system, since our action space is continuous. The Graph will essentially define a single multi-actuated robot which has various information representations such as internal joint angles, position, velocity, etc. The GNN serves only to represent the system in a much better and efficient manner. Using a GNN here would be worth a shot as it allows us to scale up/down the number of bots during implementation as the training or execution would not directly depend on the bots but rather the graph nodes.\\
+\\ \textbf{Read on how we can use GNN to decentralise}\\ \\
+We deploy this over an abstracted CBF layer for safety guarantees. The GNN can effectively model the interactions between multiple robots and the object being manipulated, allowing for decentralized decision-making while still considering the overall system dynamics. The benefit of having such a system would be that the exploration space for the robots will be reduced significantly due to the fact that a lot of explorative actions would be deemed unsafe by the CBF layer and instead be replaced by safe actions suggested by the CBF layer. This would lead to a more efficient learning process and potentially better performance in complex manipulation tasks.\\
+\\
+Finally, since implementation will be slower, we can consider running the RL pass every few passes, and then using a PID controller to essentially smoothen out the path between two RL passes. This would help in reducing the computational load on the system and also help in faster convergence of the RL algorithm since it would not have to deal with micro-adjustments in the path.
+
+\chapter{Comparison}
+1. We'll have a monolthic RL with all features like Obstacle avoidance, etc. 
+2. We'll have my way
+
+COmpare both in terms of computational speed, safety, accuracy, so on. 
+
+
 \listoffigures
+
 \end{document} 

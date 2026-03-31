@@ -1,0 +1,493 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+
+\geometry{top=1in, bottom=1in, left=1.25in, right=1.25in}
+
+% Code listing style
+\lstset{
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{red},
+    showstringspaces=false,
+    language=Python
+}
+
+\title{\textbf{Comprehensive Explanation of 5-Robot Pentagon Formation NMPC System}}
+\author{Code Analysis and Documentation}
+\date{\today}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{\thepage}
+\lhead{NMPC Pentagon Formation}
+
+\begin{document}
+
+\maketitle
+
+\section{Overview and Imports}
+
+The code implements a 5-robot system that cooperatively carries a pentagonal object while navigating through static and dynamic obstacles. The robots grasp the object at the midpoints of the pentagon's edges, maintaining a rigid formation throughout the motion. The system uses CasADi for non-linear optimization, NumPy for numerical computations, and Matplotlib for visualization and animation. This represents a sophisticated multi-agent control problem combining trajectory tracking, formation maintenance, manipulation, and obstacle avoidance.
+
+\section{SAT Collision Detection}
+
+The \texttt{sat\_gap\_fixed} function (Lines 18--47) implements the Separating Axis Theorem (SAT) to detect collisions between polygons. It works by projecting both polygons onto all potential separating axes---the normals to each polygon's edges. For each axis, it computes the minimum and maximum projection values for both polygons. If there's a gap between the projections on any axis, the polygons don't collide. The function returns the minimum gap found across all axes---a positive value indicates separation (no collision), while a negative value indicates overlap (collision).
+
+The \texttt{create\_hexagon\_symbolic} function generates hexagonal obstacle representations using CasADi expressions, enabling symbolic differentiation necessary for optimization. The \texttt{create\_hexagon\_numpy} function creates the same hexagonal geometry using NumPy arrays for visualization purposes. This dual approach separates the symbolic computation needed for optimization from the numerical computation needed for graphics.
+
+\section{Triangle Point Generation}
+
+The \texttt{calculate\_triangle\_points\_sym} function (Lines 50--63) computes three key points that form a triangle representing a robot's footprint. Given a robot base position $\mathbf{R}$, end-effector position $\mathbf{A}$, and robot radius $r$, it calculates:
+\begin{itemize}
+    \item Point $\mathbf{A}$: the end-effector itself
+    \item Points $\mathbf{B}$ and $\mathbf{C}$: vertices of a tangent triangle
+\end{itemize}
+
+This triangle ensures the robot's circular body doesn't collide with the grasp point. The function uses the arc sine to find the tangency angle:
+\[
+\theta = \arcsin\left(\min\left(\frac{r}{\|\mathbf{A} - \mathbf{R}\|}, 0.999\right)\right)
+\]
+
+Then it projects this to find the tangent line from the base to the end-effector, with points $\mathbf{B}$ and $\mathbf{C}$ positioned perpendicular to this line.
+
+\section{Angular Non-Collinearity Constraint}
+
+The \texttt{compute\_proper\_angular\_constraint} function (Lines 66--93) ensures that the robot's triangular footprint doesn't become collinear with the pentagon edges it's grasping. For a valid grasp, the robot's body points ($\mathbf{B}$ and $\mathbf{C}$, which define the tangent circle) must maintain a minimum angle relative to the pentagon's edge directions.
+
+The function computes unit vectors along the pentagon edges and the robot's body, then calculates the dot product to find the angle between them:
+\[
+h_{\text{AB-left}} = \cos(\theta_{\min}) - \left|\cos(\angle(\mathbf{u}_{AB}, \mathbf{u}_{\text{edge-left}}))\right|
+\]
+
+It returns a barrier function value that becomes negative if the constraint is violated (collinearity becomes too acute). This constraint is critical for maintaining grasp validity throughout the motion.
+
+\section{Dynamic Obstacle Trajectory Generation}
+
+Three helper functions (Lines 96--114) generate obstacle motion patterns:
+
+\begin{itemize}
+    \item \texttt{generate\_circular\_trajectory}: Creates a circular path around a center point with specified angular velocity $\omega$:
+    \[
+    \mathbf{p}_{\text{obs}}(t) = \mathbf{c} + r \begin{pmatrix} \cos(\omega t) \\ \sin(\omega t) \end{pmatrix}
+    \]
+    
+    \item \texttt{generate\_linear\_trajectory}: Creates straight-line motion with constant velocity $\mathbf{v}$:
+    \[
+    \mathbf{p}_{\text{obs}}(t) = \mathbf{p}_0 + \mathbf{v} \cdot t
+    \]
+    
+    \item \texttt{get\_velocity\_from\_trajectory}: Computes obstacle velocity at any timestep using finite differencing:
+    \[
+    \mathbf{v}(k) = \frac{\mathbf{p}(k+1) - \mathbf{p}(k)}{\Delta t}
+    \]
+\end{itemize}
+
+This velocity computation is crucial for the velocity-based CBF constraints that need to know obstacle motion for predictive avoidance.
+
+\section{Pentagon Geometry Setup}
+
+The \texttt{create\_pentagon\_vertices} function (Lines 117-128) generates the five vertices of a regular pentagon given its center and circumradius (distance from center to vertex):
+\[
+\mathbf{v}_i = \mathbf{c} + r_{\text{circum}} \begin{pmatrix} \cos\left(\frac{2\pi i}{5} - \frac{\pi}{2}\right) \\ \sin\left(\frac{2\pi i}{5} - \frac{\pi}{2}\right) \end{pmatrix}
+\]
+
+Starting from the top for consistent orientation. The \texttt{get\_pentagon\_midpoints} function computes the midpoints between consecutive vertices:
+\[
+\mathbf{m}_i = \frac{\mathbf{v}_i + \mathbf{v}_{i+1}}{2}
+\]
+
+These midpoints serve as the five grasp points where the robots hold the pentagon, transforming the pentagon geometry into the manipulation interface.
+
+\section{Parameter Definition}
+
+The code defines fundamental system parameters (Lines 131--185). Key parameters include:
+
+\begin{itemize}
+    \item \textbf{Time Step}: $\Delta t = 0.1$ seconds
+    \item \textbf{Horizon Length}: $N = 20$ steps (2-second planning window)
+    \item \textbf{Number of Robots}: $n_r = 3$
+    \item \textbf{Robot State}: $\mathbf{x}_i = [x_b, y_b, q_1, d_2, q_3]^T$ (base position and three arm joints)
+    \item \textbf{Robot Control}: $\mathbf{u}_i = [v_x, v_y, \dot{q}_1, \dot{d}_2, \dot{q}_3]^T$
+    \item \textbf{Arm Link Lengths}: $L_1 = L_3 = 0.05$ m (fixed), $d_2 \in [0.1, 0.5]$ m (variable)
+\end{itemize}
+
+The cost matrices define optimization priorities. The object tracking cost matrix $\mathbf{Q}_{\text{obj}} = \text{diag}(150, 150)$ defines how strongly the system tracks the reference trajectory---higher values mean stricter tracking. The control cost matrix $\mathbf{R}$ penalizes control effort, with higher penalties on arm movements ($R_{43} = 50$) to keep the arms stable and energy-efficient.
+
+\subsection{Safety Parameters}
+
+The Control Barrier Function (CBF) parameters define safety distances:
+\begin{itemize}
+    \item \textbf{Inter-robot Clearance}: $d_{\min,\text{inter}} = 0.20$ m
+    \item \textbf{Base to Obstacle}: $d_{\min,\text{base-obs}} = 0.50$ m
+    \item \textbf{Object to Obstacle}: $d_{\min,\text{obj-obs}} = 0.40$ m
+    \item \textbf{CBF Gain}: $\gamma_{\text{CBF}} = 10.0$ (larger gains ensure faster constraint satisfaction)
+    \item \textbf{Maximum Slack Allowed}: $\varepsilon_{\max} = 0.01$ (small slack for near-violations in tight maneuvers)
+\end{itemize}
+
+The rigidity constraint weight $W_{\text{rigidity}} = 10^7$ is extremely high, making formation deformation heavily penalized relative to other objectives.
+
+\section{Initial Condition Setup}
+
+The initialization (Lines 187--234) establishes valid starting configurations for all robots. The pentagon object starts at position $(1.5, 2.5)$ m. For each robot $i$:
+
+\begin{enumerate}
+    \item The grasp point $\mathbf{m}_i$ is located at the midpoint of pentagon edge $i$
+    \item The base position is calculated as:
+    \[
+    \mathbf{b}_i = \mathbf{m}_i + \frac{\mathbf{m}_i - \mathbf{c}_{\text{obj}}}{\|\mathbf{m}_i - \mathbf{c}_{\text{obj}}\|} \cdot L_{\text{arm}}
+    \]
+    where $L_{\text{arm}}$ is the initial arm length (sum of all segments)
+    
+    \item The arm angles are computed to match this configuration:
+    \[
+    q_1 = \arctan2(m_{i,y} - b_{i,y}, m_{i,x} - b_{i,x})
+    \]
+    with $d_2$ initialized to 0.3 m and $q_3$ to 0
+\end{enumerate}
+
+This ensures all robots start in a valid configuration with their end-effectors at the pentagon grasp points.
+
+\section{Forward Kinematics}
+
+The \texttt{fk\_ee\_world\_np} function (Lines 237--252) computes the end-effector position using NumPy:
+\[
+\begin{pmatrix} x_e \\ y_e \end{pmatrix} = \begin{pmatrix} x_b \\ y_b \end{pmatrix} + (L_1 + d_2)\begin{pmatrix} \cos(q_1) \\ \sin(q_1) \end{pmatrix} + L_3\begin{pmatrix} \cos(q_1 + q_3) \\ \sin(q_1 + q_3) \end{pmatrix}
+\]
+
+where:
+\begin{itemize}
+    \item $(x_b, y_b)$ is the robot base position
+    \item $L_1, L_3$ are fixed link lengths
+    \item $d_2$ is the variable-length middle segment
+    \item $q_1, q_3$ are joint angles
+\end{itemize}
+
+The \texttt{fk\_ee\_sym} function implements the same computation using CasADi symbolic expressions. This symbolic version is crucial because the optimizer must differentiate through these expressions to compute gradients and Jacobians for the optimization problem.
+
+\section{Reference Trajectory Generation}
+
+The code generates two types of reference trajectories (Lines 261--277) for the object's centroid to follow:
+
+\begin{itemize}
+    \item \textbf{Straight-line trajectory}:
+    \[
+    \mathbf{c}_{\text{ref}}(k) = \mathbf{c}_0 + k \cdot \Delta t \cdot \frac{\mathbf{c}_{\text{goal}} - \mathbf{c}_0}{T}
+    \]
+    
+    \item \textbf{Sinusoidal trajectory} (selected):
+    \[
+    \mathbf{c}_{\text{ref}}(k) = \begin{pmatrix} c_{0,x} + 0.5 \cdot k \cdot \Delta t \\ c_{0,y} + A \sin(\omega \cdot k \cdot \Delta t) \end{pmatrix}
+    \]
+    with amplitude $A = 1.0$ m and frequency $\omega = 0.2$ rad/s
+\end{itemize}
+
+The sinusoidal reference tests whether the formation can execute evasive maneuvers while avoiding obstacles and maintaining formation integrity.
+
+\section{Obstacle Configuration}
+
+The system includes static and dynamic obstacles (Lines 280--302):
+
+\subsection{Static Obstacles}
+Three hexagon-shaped obstacles with radius $r_{\text{static}} = 0.35$ m positioned at fixed locations:
+\begin{itemize}
+    \item Obstacle 1: center at $(4.0, 3.5)$ m
+    \item Obstacle 2: center at $(12.0, 1.5)$ m
+    \item Obstacle 3: center at $(7.0, 7.5)$ m
+\end{itemize}
+
+\subsection{Dynamic Obstacles}
+Two moving obstacles test real-time avoidance:
+
+\begin{itemize}
+    \item \textbf{Obstacle 1 (Circular Motion)}: Orbits around center $(8.0, 1.5)$ m with orbital radius 0.8 m and angular velocity $\omega = 0.3$ rad/s
+    
+    \item \textbf{Obstacle 2 (Oscillation)}: Oscillates along the x-axis from base position $(7.5, 4.2)$ m with sinusoidal motion:
+    \[
+    \mathbf{p}_{\text{obs},2}(t) = \begin{pmatrix} 7.5 + 2.0\sin(0.2t) \\ 4.2 \end{pmatrix}
+    \]
+\end{itemize}
+
+Dynamic obstacle radius: $r_{\text{dyn}} = 0.30$ m. These obstacles are strategically positioned to create bottlenecks that test the formation's navigation capability.
+
+\section{Optimization Problem Formulation}
+
+The CasADi Opti object (Lines 305--330) sets up a non-linear optimization problem:
+
+\begin{itemize}
+    \item \textbf{Decision Variables}:
+    \begin{itemize}
+        \item $\mathbf{X} \in \mathbb{R}^{(n_r \cdot 5) \times (N+1)}$: state trajectory
+        \item $\mathbf{U} \in \mathbb{R}^{(n_r \cdot 5) \times N}$: control inputs
+        \item $s_{\text{cbf}} \in \mathbb{R}^{n_{\text{cbf}} \times N}$: CBF constraint slack variables
+        \item $s_{\text{rig}} \in \mathbb{R}^{n_{\text{rig}} \times N}$: rigidity constraint slack variables
+    \end{itemize}
+    
+    \item \textbf{Parameters}:
+    \begin{itemize}
+        \item $\mathbf{X}_{\text{ref}} \in \mathbb{R}^{2 \times (N+1)}$: reference object trajectory
+        \item $\mathbf{x}_0 \in \mathbb{R}^{n_r \cdot 5}$: initial state
+        \item $\{\mathbf{c}_{\text{obs}}\}$: static obstacle centers
+        \item $\{\mathbf{c}_{\text{dyn}}, \mathbf{v}_{\text{dyn}}\}$: dynamic obstacle positions and velocities
+    \end{itemize}
+\end{itemize}
+
+The slack variables allow constraint violations when necessary, heavily penalized in the cost function to enforce safety while maintaining feasibility during tight maneuvers.
+
+\section{Dynamics and State Bounds}
+
+The system dynamics (Lines 332--348) are purely kinematic:
+\[
+\mathbf{b}_{i,k+1} = \mathbf{b}_{i,k} + \Delta t \cdot \mathbf{u}_{i,k}^{\text{base}}
+\]
+\[
+\mathbf{a}_{i,k+1} = \mathbf{a}_{i,k} + \Delta t \cdot \mathbf{u}_{i,k}^{\text{arm}}
+\]
+
+where $\mathbf{b}_{i,k}$ is the base position and $\mathbf{a}_{i,k} = [q_1, d_2, q_3]^T$ is the arm configuration.
+
+State bounds constrain the workspace:
+\[
+\begin{cases}
+x_b, y_b \in [-20, 20] \text{ m} & \text{(base position)} \\
+q_1, q_3 \in [-\pi, \pi] \text{ rad} & \text{(joint angles)} \\
+d_2 \in [0.1, 0.5] \text{ m} & \text{(middle link length)}
+\end{cases}
+\]
+
+These bounds prevent the arm from reaching unphysical configurations and keep the system within the operational workspace.
+
+\section{Cost Function Design}
+
+The cost function (Lines 351--400) combines multiple objectives weighted by their importance:
+
+\begin{equation}
+J = J_{\text{track}} + J_{\text{control}} + J_{\text{form}} + J_{\text{prog}} + J_{\text{slack}}
+\end{equation}
+
+\subsection{Tracking Cost}
+\[
+J_{\text{track}} = \sum_{k=0}^{N-1} \|\mathbf{c}_k - \mathbf{x}_{\text{ref}}(k)\|_{\mathbf{Q}_{\text{obj}}}^2 + \|\mathbf{c}_N - \mathbf{x}_{\text{ref}}(N)\|_{\mathbf{Q}_{\text{terminal}}}^2
+\]
+
+where $\mathbf{c}_k = \frac{1}{n_r}\sum_{i=1}^{n_r} \mathbf{e}_{i,k}$ is the object centroid (mean of end-effector positions). Terminal cost $\mathbf{Q}_{\text{terminal}} = 600 \cdot \mathbf{I}$ is much higher to ensure reaching the goal.
+
+\subsection{Control Cost}
+\[
+J_{\text{control}} = \sum_{k=0}^{N-1} \mathbf{u}_k^T \mathbf{R} \mathbf{u}_k
+\]
+
+where $\mathbf{R} = \text{diag}(\text{tile}([1, 1, 10, 50, 10], n_r))$ penalizes large arm movements more heavily.
+
+\subsection{Formation Keeping Cost}
+\[
+J_{\text{form}} = Q_{\text{form}} \sum_{k=0}^{N-1} \sum_{i=1}^{n_r} \|\mathbf{b}_{i,k} - (\mathbf{c}_k + \Delta\mathbf{b}_i^0)\|^2
+\]
+
+where $\Delta\mathbf{b}_i^0 = \mathbf{b}_{i,0} - \mathbf{c}_0$ is the initial offset of robot base from object centroid. This penalizes deviations of robot bases from their expected positions relative to the centroid.
+
+\subsection{Progress Incentive}
+\[
+J_{\text{prog}} = -k_{\text{prog}} \sum_{k=0}^{N-1} \bar{v}_{x,k}
+\]
+
+where $\bar{v}_{x,k} = \frac{1}{n_r}\sum_{i=1}^{n_r} u_{i,k}^{v_x}$ is the average base velocity in the x-direction. This negative term rewards forward progress.
+
+\subsection{Slack Variable Penalties}
+\[
+J_{\text{slack}} = w_{\text{cbf}} \|s_{\text{cbf}}\|_F^2 + w_{\text{rig}} \|s_{\text{rig}}\|_F^2
+\]
+
+with extremely high weights ($w_{\text{cbf}} = 5 \times 10^5$, $w_{\text{rig}} = 10^7$) to enforce safety and formation integrity.
+
+\section{Velocity-Based CBF Constraints}
+
+The code implements velocity-based Control Barrier Functions for six types of safety constraints (Lines 403--529). The general form of a velocity-based CBF is:
+
+\[
+\dot{h} + \gamma h \geq -\varepsilon
+\]
+
+where $h$ is the barrier function (positive when safe), $\dot{h}$ is its time derivative, $\gamma > 0$ is the CBF gain, and $\varepsilon \geq 0$ is slack.
+
+\subsection{Inter-Robot Collision Avoidance}
+\[
+h_{\text{inter},ij} = \|\mathbf{b}_i - \mathbf{b}_j\|^2 - d_{\min,\text{inter}}^2
+\]
+\[
+\dot{h}_{\text{inter},ij} = 2(\mathbf{b}_i - \mathbf{b}_j)^T(\mathbf{v}_i - \mathbf{v}_j)
+\]
+
+A ``gating'' mechanism deactivates this constraint when robots are far apart ($\|\mathbf{b}_i - \mathbf{b}_j\| > d_{\text{gate}}$) to reduce computational burden.
+
+\subsection{Robot Base to Static Obstacles}
+\[
+h_{\text{base-static}} = \|\mathbf{b}_i - \mathbf{c}_{\text{obs}}\|^2 - (r_{\text{obs}} + d_{\min,\text{base-obs}})^2
+\]
+\[
+\dot{h}_{\text{base-static}} = 2(\mathbf{b}_i - \mathbf{c}_{\text{obs}})^T \mathbf{v}_i
+\]
+
+\subsection{End-Effector to Static Obstacles}
+\[
+h_{\text{ee-static}} = \|\mathbf{e}_i - \mathbf{c}_{\text{obs}}\|^2 - (r_{\text{obs}} + d_{\min,\text{obj-obs}})^2
+\]
+\[
+\dot{h}_{\text{ee-static}} = 2(\mathbf{e}_i - \mathbf{c}_{\text{obs}})^T \mathbf{v}_e
+\]
+
+where $\mathbf{v}_e$ is computed using the Jacobian:
+\[
+\mathbf{v}_e = \mathbf{v}_b + \mathbf{J}_{\text{arm}} \dot{\mathbf{a}}
+\]
+
+\subsection{Dynamic Obstacle Constraints}
+For dynamic obstacles, the relative velocity accounts for obstacle motion:
+\[
+h_{\text{dyn}} = \|\mathbf{b}_i - \mathbf{c}_{\text{dyn}}\|^2 - (r_{\text{dyn}} + d_{\min})^2
+\]
+\[
+\dot{h}_{\text{dyn}} = 2(\mathbf{b}_i - \mathbf{c}_{\text{dyn}})^T(\mathbf{v}_i - \mathbf{v}_{\text{dyn}})
+\]
+
+where $\mathbf{v}_{\text{dyn}}$ is the obstacle velocity computed from trajectory prediction.
+
+\subsection{Angular Non-Collinearity}
+This constraint ensures the robot's grasp remains geometrically valid, preventing the manipulation triangle from becoming collinear with pentagon edges. The barrier function computes angles and ensures minimum angular separation with gain $\gamma_{\text{angular}} = 15.0$.
+
+\section{Rigidity Constraints}
+
+To maintain a rigid pentagon formation, the code constrains all pairwise distances between robot end-effectors and bases (Lines 532--576). For $n_r = 3$ robots, there are $\\binom{3}{2} = 3$ end-effector pairs and 3 base pairs.
+
+\subsection{End-Effector Rigidity}
+For each pair $(i,j)$:
+\[
+d_{ij,0}(1 - \varepsilon_{\text{rig}}) \leq \|\mathbf{e}_i - \mathbf{e}_j\| \leq d_{ij,0}(1 + \varepsilon_{\text{rig}})
+\]
+
+with tolerance $\varepsilon_{\text{rig}} = 0.008$ (0.8\%), where $d_{ij,0}$ is the initial pairwise distance.
+
+\subsection{Base Rigidity}
+Similarly for base positions:
+\[
+d_{ij,\text{base},0}(1 - \varepsilon_{\text{base}}) \leq \|\mathbf{b}_i - \mathbf{b}_j\| \leq d_{ij,\text{base},0}(1 + \varepsilon_{\text{base}})
+\]
+
+with relaxed tolerance $\varepsilon_{\text{base}} = 0.03$ (3\%). The looser base tolerance allows more maneuverability while still preventing outward swings.
+
+These constraints prevent the formation from deforming, ensuring the grasp remains valid and the pentagon object maintains its structural integrity throughout motion.
+
+\section{Solver Configuration}
+
+The code configures IPOPT (Interior Point OPTimizer) with specific parameters (Lines 579--591):
+
+\begin{itemize}
+    \item \textbf{Print Level}: 0 (minimal console output)
+    \item \textbf{Warm Start}: \texttt{yes} (initializes from previous solution)
+    \item \textbf{Maximum Iterations}: 3000 (sufficient for complex problems)
+    \item \textbf{Tolerance}: $10^{-6}$ (high accuracy)
+    \item \textbf{Acceptable Tolerance}: $10^{-5}$ (fallback accuracy)
+    \item \textbf{Acceptable Iterations}: 20 (iterations before accepting suboptimal solution)
+\end{itemize}
+
+These settings balance solution quality with computational speed. Warm-starting from the previous MPC solution is critical for achieving real-time performance, where each iteration must solve in under 0.1 seconds.
+
+\section{Simulation Loop}
+
+The main simulation (Lines 594--690) runs for 40 timesteps, implementing a receding-horizon control strategy:
+
+\begin{enumerate}
+    \item \textbf{Reference Extraction}: Extract the reference trajectory window covering the next $N$ steps
+    
+    \item \textbf{Parameter Update}: Set current state and obstacle positions as optimization parameters
+    
+    \item \textbf{Warm-Start Initialization}: Initialize decision variables from previous solution:
+    \[
+    \mathbf{X}^{init} = [\mathbf{X}^{prev}(\cdot, 2:N+1), \mathbf{X}^{prev}(\cdot, N+1)], \quad \mathbf{U}^{init} = [\mathbf{U}^{prev}(\cdot, 2:N), \mathbf{U}^{prev}(\cdot, N)]
+    \]
+    
+    \item \textbf{Optimization}: Solve the NMPC problem using IPOPT
+    
+    \item \textbf{Control Application}: Apply the first control input:
+    \[
+    \mathbf{x}(k+1) = \mathbf{x}(k) + \Delta t \cdot \mathbf{u}(k)
+    \]
+    
+    \item \textbf{Logging}: Record solve time, status, and constraint violations
+\end{enumerate}
+
+When solving fails, the code attempts recovery by extracting the debug solution, which often provides a feasible (though suboptimal) control despite convergence issues. State bounds are enforced via clipping after control application.
+
+\section{Animation Generation}
+
+The visualization code (Lines 693--808) creates a detailed real-time animation showing the system evolution:
+
+\subsection{Rendered Elements}
+\begin{itemize}
+    \item \textbf{Static Obstacles}: Hexagon-shaped regions colored in red
+    \item \textbf{Dynamic Obstacles}: Orange hexagons with motion trails showing past positions
+    \item \textbf{Robots}: Circular bases colored distinctly for each robot
+    \item \textbf{Robot Arms}: Lines showing the two-link kinematic chain
+    \item \textbf{Robot Footprints}: Triangular regions representing the contact/grasp area
+    \item \textbf{Pentagon Object}: Black polygon connecting the five end-effectors
+    \item \textbf{Reference Trajectory}: Dashed black line showing the desired object path
+\end{itemize}
+
+\subsection{Computational Steps}
+For each animation frame:
+
+\begin{enumerate}
+    \item Compute forward kinematics for all end-effectors
+    \item Update robot base positions and arm line plots
+    \item Calculate triangular footprints using the tangency calculation
+    \item Render the pentagon object as a polygon through the five end-effector points
+    \item Update dynamic obstacle positions from trajectory data
+    \item Display current time and step information
+\end{enumerate}
+
+The animation is saved as an MP4 video at 20 fps using FFMpegWriter, creating a clear visual record of the system's behavior.
+
+\section{Key Innovations and Technical Contributions}
+
+This implementation combines several advanced control techniques:
+
+\subsection{Velocity-Based CBFs}
+Instead of traditional position-based barrier functions, this code uses velocity-based CBFs that incorporate state derivatives. This allows the system to predict collisions and react proactively, rather than only responding to imminent threats. The gain $\gamma$ controls the exponential convergence rate: larger $\gamma$ ensures faster constraint satisfaction.
+
+\subsection{Rigid Formation Control}
+The all-pairwise distance constraints maintain the pentagon formation's geometric integrity. By constraining both end-effector and base distances, the system prevents internal deformation while allowing coordinated motion. The relaxed base tolerance enables maneuverability in constrained spaces.
+
+\subsection{Dynamic Obstacle Handling}
+Incorporating obstacle velocity predictions into the CBF formulation enables safety-aware navigation in dynamic environments. The system doesn't just react to current obstacle positions but predicts future collisions based on velocity.
+
+\subsection{Cooperative Manipulation}
+Multiple robots working together to transport an object while maintaining formation represents a complex multi-objective control problem. The formation cost term ensures the object remains rigid while tracking references, and CBF constraints prevent inter-robot collisions.
+
+\subsection{Real-Time MPC via Warm-Starting}
+The receding-horizon optimization with warm-starting from the previous solution achieves real-time performance. Each solve builds on the previous one, significantly reducing computation time compared to solving from scratch. This enables deployment in time-critical applications.
+
+\subsection{Jacobian-Based Velocity Computation}
+The code explicitly computes end-effector velocities using the geometric Jacobian:
+\[
+\mathbf{J} = \begin{bmatrix}
+\frac{\partial \mathbf{e}}{\partial q_1} & \frac{\partial \mathbf{e}}{\partial d_2} & \frac{\partial \mathbf{e}}{\partial q_3}
+\end{bmatrix}
+\]
+
+This enables proper velocity-based constraints for the manipulator's end-effector, crucial for safe interaction with obstacles and maintaining grasp validity.
+
+\section{Conclusion}
+
+This NMPC implementation demonstrates sophisticated multi-agent coordination combining trajectory tracking, formation maintenance, manipulation, and obstacle avoidance. The integration of velocity-based control barrier functions, rigid formation constraints, and cooperative manipulation creates a system capable of complex autonomous behaviors. The use of CasADi for symbolic computation and IPOPT for non-linear optimization provides a powerful framework for solving this challenging control problem in near-real-time.
+
+The code serves as a comprehensive example of modern control theory applied to multi-robot systems, with practical applications in warehouse automation, collaborative manufacturing, and autonomous transportation of objects in cluttered environments.
+
+\end{document}

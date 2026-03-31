@@ -372,10 +372,8 @@ for k in range(N):
     g.append(B_y[k] - (x[6, k] + x[8, k]*ca.sin(x[7, k])))
 
     # # Distance between grippers and object must be equal to l1, l2
-    # dist1_sq = (object_x[:, k] - (x[0, k] + x[3, k]*ca.cos(x[2, k])))**2 + (object_y[:, k] - (x[1, k] + x[3, k]*ca.sin(x[2, k])))**2
-    # g.append(dist1_sq - l1**2)
-    # dist2_sq = (object_x[:, k] - (x[5, k] + x[8, k]*ca.cos(x[7, k])))**2 + (object_y[:, k] - (x[6, k] + x[8, k]*ca.sin(x[7, k])))**2
-    # g.append(dist2_sq - l2**2)
+    
+    g.append(a**2 + b**2 - 1.0)
     
 
 # Objective
@@ -483,7 +481,7 @@ for k in range(N):
 
     # # distance constraints for grippers to object
     # lbg += [0.0]; ubg += [0.0]
-    # lbg += [0.0]; ubg += [0.0]
+    lbg += [0.0]; ubg += [0.0]
 
 # check lengths
 assert len(lbg) == g_vec.shape[0], f"lbg len {len(lbg)} != g size {g_vec.shape[0]}"
